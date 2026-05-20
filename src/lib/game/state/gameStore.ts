@@ -1,0 +1,537 @@
+import { writable } from 'svelte/store';
+import type { ActionId, AreaId, Enemy, GameState, Item, WorldNodeId } from '../types/game';
+import { areaOrder, nodes } from '../data/world';
+import { cloneEnemy, enemies, enemiesByArea } from '../data/enemies';
+import { cloneItem, generateLootItem, rollForgeStock } from '../data/items';
+import { createPlayer } from '../systems/player';
+import { between, roll } from '../systems/random';
+import { startCombat } from '../systems/combat';
+
+const saveKey = 'glyphbound-save-v6-completion';
+const forgeRefreshMs = 120000;
+
+function now(): number {
+  return Date.now();
+}
+
+function initialState(): GameState {
+  const createdAt = now();
+
+  return {
+    version: 6,
+    location: 'village',
+    player: createPlayer(),
+    combat: {
+      active: false,
+      enemy: null,
+      tick: 0,
+      source: 'village'
+    },
+    areaProgress: {
+      'glyphroot-grove': { fights: 0, gathered: 0, cleared: false },
+      'rust-mine': { fights: 0, gathered: 0, cleared: false },
+      'sunken-library': { fights: 0, gathered: 0, cleared: false }
+    },
+    bossUnlocked: false,
+    bossDefeated: false,
+    notice: null,
+    forge: {
+      stock: rollForgeStock('glyphroot-grove', 4),
+      lastRefreshAt: createdAt,
+      nextRefreshAt: createdAt + forgeRefreshMs
+    },
+    wiki: {
+      items: {},
+      enemies: {},
+      rareEnemies: {}
+    },
+    log: [
+      'Welcome to Glyphbound.',
+      'The Forge stock changes every 2 minutes.',
+      'Clear Grove, Mine and Library to unlock The Watcher.'
+    ]
+  };
+}
+
+function loadState(): GameState {
+  const fresh = initialState();
+
+  if (typeof localStorage === 'undefined') {
+    return fresh;
+  }
+
+  const raw = localStorage.getItem(saveKey);
+
+  if (!raw) {
+    return fresh;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<GameState>;
+
+    return normalizeState({
+      ...fresh,
+      ...parsed,
+      version: 6,
+      player: {
+        ...fresh.player,
+        ...parsed.player,
+        materials: {
+          ...fresh.player.materials,
+          ...parsed.player?.materials
+        },
+        equipment: {
+          ...fresh.player.equipment,
+          ...parsed.player?.equipment
+        },
+        inventory: parsed.player?.inventory ?? fresh.player.inventory
+      },
+      combat: {
+        active: false,
+        enemy: null,
+        tick: 0,
+        source: 'village'
+      },
+      areaProgress: {
+        'glyphroot-grove': {
+          ...fresh.areaProgress['glyphroot-grove'],
+          ...parsed.areaProgress?.['glyphroot-grove']
+        },
+        'rust-mine': {
+          ...fresh.areaProgress['rust-mine'],
+          ...parsed.areaProgress?.['rust-mine']
+        },
+        'sunken-library': {
+          ...fresh.areaProgress['sunken-library'],
+          ...parsed.areaProgress?.['sunken-library']
+        }
+      },
+      forge: {
+        ...fresh.forge,
+        ...parsed.forge,
+        stock: parsed.forge?.stock?.length ? parsed.forge.stock : fresh.forge.stock
+      },
+      wiki: {
+        items: {
+          ...fresh.wiki.items,
+          ...parsed.wiki?.items
+        },
+        enemies: {
+          ...fresh.wiki.enemies,
+          ...parsed.wiki?.enemies
+        },
+        rareEnemies: {
+          ...fresh.wiki.rareEnemies,
+          ...parsed.wiki?.rareEnemies
+        }
+      },
+      notice: null,
+      log: parsed.log?.slice(0, 60) ?? fresh.log
+    });
+  } catch {
+    return fresh;
+  }
+}
+
+function normalizeState(state: GameState): GameState {
+  for (const item of state.player.inventory) {
+    discoverItem(state, item);
+  }
+
+  for (const item of Object.values(state.player.equipment)) {
+    if (item) {
+      discoverItem(state, item);
+    }
+  }
+
+  refreshForgeIfNeeded(state);
+  return state;
+}
+
+function saveState(state: GameState): void {
+  if (typeof localStorage === 'undefined') {
+    return;
+  }
+
+  localStorage.setItem(saveKey, JSON.stringify(state));
+}
+
+function cloneState(state: GameState): GameState {
+  return {
+    ...state,
+    player: {
+      ...state.player,
+      inventory: [...state.player.inventory],
+      equipment: { ...state.player.equipment },
+      materials: { ...state.player.materials }
+    },
+    combat: {
+      ...state.combat,
+      enemy: state.combat.enemy ? { ...state.combat.enemy } : null
+    },
+    areaProgress: {
+      'glyphroot-grove': { ...state.areaProgress['glyphroot-grove'] },
+      'rust-mine': { ...state.areaProgress['rust-mine'] },
+      'sunken-library': { ...state.areaProgress['sunken-library'] }
+    },
+    forge: {
+      ...state.forge,
+      stock: [...state.forge.stock]
+    },
+    wiki: {
+      items: { ...state.wiki.items },
+      enemies: { ...state.wiki.enemies },
+      rareEnemies: { ...state.wiki.rareEnemies }
+    },
+    log: state.log.slice(0, 60)
+  };
+}
+
+function canPay(state: GameState, cost = 0): boolean {
+  return state.player.gold >= cost;
+}
+
+function hasMaterials(state: GameState, needs?: Partial<Record<string, number>>): boolean {
+  if (!needs) {
+    return true;
+  }
+
+  return Object.entries(needs).every(([key, value]) => (state.player.materials[key] ?? 0) >= (value ?? 0));
+}
+
+function payMaterials(state: GameState, needs?: Partial<Record<string, number>>): void {
+  if (!needs) {
+    return;
+  }
+
+  for (const [key, value] of Object.entries(needs)) {
+    state.player.materials[key] = Math.max(0, (state.player.materials[key] ?? 0) - (value ?? 0));
+  }
+}
+
+function addMaterial(state: GameState, key: string, amount: number): void {
+  state.player.materials[key] = (state.player.materials[key] ?? 0) + amount;
+}
+
+function highestUnlockedArea(state: GameState): AreaId {
+  if (state.areaProgress['sunken-library'].cleared) {
+    return 'sunken-library';
+  }
+
+  if (state.areaProgress['rust-mine'].cleared) {
+    return 'sunken-library';
+  }
+
+  if (state.areaProgress['glyphroot-grove'].cleared) {
+    return 'rust-mine';
+  }
+
+  return 'glyphroot-grove';
+}
+
+function randomEnemyFor(location: WorldNodeId): Enemy {
+  if (!isAreaId(location)) {
+    return cloneEnemy('rootling');
+  }
+
+  const ids = enemiesByArea[location];
+  const rare = ids.filter((id) => cloneEnemy(id as keyof typeof enemies).rare);
+  const common = ids.filter((id) => !cloneEnemy(id as keyof typeof enemies).rare);
+
+  if (rare.length && roll(location === 'glyphroot-grove' ? 0.08 : 0.035)) {
+    return cloneEnemy(rare[between(0, rare.length - 1)] as keyof typeof enemies);
+  }
+
+  return cloneEnemy(common[between(0, common.length - 1)] as keyof typeof enemies);
+}
+
+function gatherFor(state: GameState, location: AreaId): void {
+  const table: Record<AreaId, [string, number][]> = {
+    'glyphroot-grove': [
+      ['glyphroot', between(1, 3)],
+      ['wood', between(1, 2)],
+      ['bark', roll(0.28) ? 1 : 0]
+    ],
+    'rust-mine': [
+      ['iron', between(1, 3)],
+      ['crystal', roll(0.18) ? 1 : 0],
+      ['wood', roll(0.3) ? 1 : 0]
+    ],
+    'sunken-library': [
+      ['pages', between(1, 2)],
+      ['ink', roll(0.22) ? 1 : 0],
+      ['glyphroot', 1],
+      ['nullscrap', roll(0.12) ? 1 : 0]
+    ]
+  };
+
+  const found: string[] = [];
+
+  for (const [key, value] of table[location]) {
+    if (value <= 0) {
+      continue;
+    }
+
+    addMaterial(state, key, value);
+    found.push(`${value} ${key}`);
+  }
+
+  state.log.unshift(`Gathered ${found.join(', ')}.`);
+  state.areaProgress[location].gathered += 1;
+
+  if (roll(nodes[location].danger * 0.12)) {
+    startCombat(state, randomEnemyFor(location), location);
+  }
+}
+
+function refreshForgeIfNeeded(state: GameState): void {
+  const time = now();
+
+  if (time < state.forge.nextRefreshAt) {
+    return;
+  }
+
+  const area = highestUnlockedArea(state);
+  state.forge.stock = rollForgeStock(area, 4);
+  state.forge.lastRefreshAt = time;
+  state.forge.nextRefreshAt = time + forgeRefreshMs;
+  state.log.unshift('The Forge stock changed. Someone else bought the old items.');
+}
+
+function manualRefreshForge(state: GameState): void {
+  const area = highestUnlockedArea(state);
+  const time = now();
+
+  state.forge.stock = rollForgeStock(area, 4);
+  state.forge.lastRefreshAt = time;
+  state.forge.nextRefreshAt = time + forgeRefreshMs;
+  state.log.unshift('Forge stock refreshed.');
+}
+
+function buyForgeItem(state: GameState, itemId: string): void {
+  refreshForgeIfNeeded(state);
+
+  const item = state.forge.stock.find((entry) => entry.id === itemId);
+
+  if (!item) {
+    state.log.unshift('That item is gone. The Forge stock already changed.');
+    return;
+  }
+
+  if (!canPay(state, item.cost.gold) || !hasMaterials(state, item.cost.materials)) {
+    state.notice = {
+      title: 'Need More Grind',
+      message: `You need more gold or materials for ${item.name}. Check the item source.`,
+      kind: 'info'
+    };
+    state.log.unshift(`Not enough resources for ${item.name}.`);
+    return;
+  }
+
+  state.player.gold -= item.cost.gold;
+  payMaterials(state, item.cost.materials);
+
+  const bought = cloneItem(item);
+  state.player.inventory.push(bought);
+  state.forge.stock = state.forge.stock.filter((entry) => entry.id !== item.id);
+
+  discoverItem(state, bought);
+
+  state.notice = {
+    title: `${item.rarity.toUpperCase()} ITEM BOUGHT`,
+    message: `${bought.name} was added to your inventory.`,
+    kind: 'victory'
+  };
+
+  state.log.unshift(`Bought ${bought.name} from the Forge.`);
+}
+
+function discoverItem(state: GameState, item: Item): void {
+  state.wiki.items[item.catalogId ?? item.templateId] = true;
+}
+
+function discoverEnemy(state: GameState, enemy: Enemy): void {
+  state.wiki.enemies[enemy.id] = true;
+
+  if (enemy.rare) {
+    state.wiki.rareEnemies[enemy.id] = true;
+    state.notice = {
+      title: 'Rare Monster',
+      message: `${enemy.name} was added to your wiki.`,
+      kind: 'info'
+    };
+  }
+}
+
+function doAction(state: GameState, action: ActionId): void {
+  refreshForgeIfNeeded(state);
+
+  const node = nodes[state.location];
+  const actionData = node.actions.find((entry) => entry.id === action);
+
+  if (!actionData) {
+    return;
+  }
+
+  if (!canPay(state, actionData.cost) || !hasMaterials(state, actionData.needs)) {
+    state.log.unshift('Not enough gold or materials.');
+    return;
+  }
+
+  if (actionData.cost) {
+    state.player.gold -= actionData.cost;
+  }
+
+  payMaterials(state, actionData.needs);
+
+  if (action === 'rest') {
+    state.player.hp = state.player.maxHp;
+    state.log.unshift('Rested at the inn. HP restored.');
+    return;
+  }
+
+  if (action === 'go-grove') {
+    state.location = 'glyphroot-grove';
+    state.log.unshift('Entered Glyphroot Grove.');
+    return;
+  }
+
+  if (action === 'go-mine') {
+    state.location = 'rust-mine';
+    state.log.unshift('Entered Rust Mine.');
+    return;
+  }
+
+  if (action === 'go-library') {
+    state.location = 'sunken-library';
+    state.log.unshift('Entered Sunken Library.');
+    return;
+  }
+
+  if (action === 'go-forge') {
+    state.location = 'old-forge';
+    refreshForgeIfNeeded(state);
+    state.log.unshift('Entered The Old Forge.');
+    return;
+  }
+
+  if (action === 'go-boss') {
+    if (!state.bossUnlocked) {
+      state.log.unshift('The Watcher Gate is locked. Clear the 3 areas first.');
+      return;
+    }
+
+    state.location = 'watcher-gate';
+    state.log.unshift('The Watcher waits.');
+    return;
+  }
+
+  if (action === 'back-village') {
+    state.location = 'village';
+    state.log.unshift('Returned to Glyphbound Village.');
+    return;
+  }
+
+  if (action === 'fight' && isAreaId(state.location)) {
+    const enemy = randomEnemyFor(state.location);
+    discoverEnemy(state, enemy);
+    startCombat(state, enemy, state.location);
+    return;
+  }
+
+  if (action === 'gather' && isAreaId(state.location)) {
+    gatherFor(state, state.location);
+    return;
+  }
+
+  if (action === 'challenge-boss') {
+    if (!state.bossUnlocked) {
+      state.log.unshift('The gate is still locked.');
+      return;
+    }
+
+    if (state.bossDefeated) {
+      state.log.unshift('The Watcher is already defeated.');
+      return;
+    }
+
+    const enemy = cloneEnemy('watcher');
+    discoverEnemy(state, enemy);
+    startCombat(state, enemy, 'watcher-gate');
+  }
+}
+
+function isAreaId(value: WorldNodeId): value is AreaId {
+  return areaOrder.includes(value as AreaId);
+}
+
+function createGameStore() {
+  const store = writable<GameState>(initialState());
+  let ready = false;
+
+  function update(fn: (state: GameState) => void) {
+    store.update((state) => {
+      refreshForgeIfNeeded(state);
+      fn(state);
+      const next = cloneState(state);
+
+      if (ready) {
+        saveState(next);
+      }
+
+      return next;
+    });
+  }
+
+  return {
+    subscribe: store.subscribe,
+    boot() {
+      store.set(loadState());
+      ready = true;
+    },
+    act(action: ActionId) {
+      update((state) => {
+        if (state.combat.active) {
+          state.log.unshift('Combat is assisted. You can only watch.');
+          return;
+        }
+
+        state.notice = null;
+        doAction(state, action);
+      });
+    },
+    buyForgeItem(itemId: string) {
+      update((state) => buyForgeItem(state, itemId));
+    },
+    refreshForge() {
+      update((state) => manualRefreshForge(state));
+    },
+    clearNotice() {
+      update((state) => {
+        state.notice = null;
+      });
+    },
+    equip(item: Item) {
+      update((state) => {
+        if (!item.slot) {
+          state.log.unshift(`${item.name} cannot be equipped.`);
+          return;
+        }
+
+        state.player.equipment[item.slot] = item;
+        discoverItem(state, item);
+        state.log.unshift(`Equipped ${item.name}.`);
+      });
+    },
+    reset() {
+      const fresh = initialState();
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(saveKey);
+      }
+      store.set(fresh);
+    },
+    rawUpdate: update
+  };
+}
+
+export const game = createGameStore();
