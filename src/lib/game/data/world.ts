@@ -12,12 +12,16 @@ export const nodes: Record<string, WorldNode> = {
     minLevel: 1,
     maxLevel: 1,
     art: [
-      '      /\\',
-      '     /  \\     []',
-      '  __/____\\__  ||',
-      ' |  _  _   |  ||',
-      ' | | || |  |  ||',
-      ' |_|_||_|__| /__\\'
+      '              /\\                         []',
+      '             /  \\        ____            ||',
+      '        /\\  /____\\      /____\\           ||',
+      '       /  \\ | [] |      | [] |           ||',
+      '  ____/____\\|____|______|____|____      /__\\',
+      ' |  _   _      _      _      _    |    /____\\',
+      ' | | | | |    | |    | |    | |   |      ||',
+      ' |_| |_| |____|_|____|_|____|_|___|   ___||___',
+      '     /\\        /\\              /\\       /____\\',
+      '    /__\\      /__\\    ~ village road ~'
     ].join('\n'),
     description: 'Safe place. Rest, choose an area, visit the forge.',
     actions: [
@@ -38,11 +42,16 @@ export const nodes: Record<string, WorldNode> = {
     minLevel: 1,
     maxLevel: 10,
     art: [
-      '       &&   &&',
-      '    &&&  @  &&',
-      '  &&   /|\\    &&',
-      '      / | \\',
-      '   * glyphroot *'
+      '          &&&        &&&',
+      '       &&&&&&&    &&&&&&&',
+      '      &&&  @ &&  && @  &&&',
+      '          /|\\      /|\\',
+      '     &&  / | \\ && / | \\  &&',
+      '        /  |  \\  /  |  \\',
+      '       /___|___\\/___|___\\',
+      '          *** glyph roots ***',
+      '      . . . glowing undergrowth . . .',
+      '          { }        { }        { }'
     ].join('\n'),
     description: 'Area 1. Fight 3 times to clear it. Farm glyphroot.',
     actions: [
@@ -60,11 +69,16 @@ export const nodes: Record<string, WorldNode> = {
     minLevel: 8,
     maxLevel: 18,
     art: [
-      '  ___________',
-      ' /  _  _  _  \\',
-      '|  |#||#||#|  |',
-      '|  |#||#||#|  |',
-      ' \\____[]____/'
+      '        _______________________',
+      '       /  _   _   _   _   _   \\',
+      '      /__/ \\_/ \\_/ \\_/ \\_/ \\___\\',
+      '      | #   #   #   #   #   # |',
+      '      | #   #   #   #   #   # |',
+      '      |___     _______     ___|',
+      '          |   |  []   |   |',
+      '     _____|___|_______|___|_____',
+      '    / rusty rails >>>>>>>>>>>>  \\',
+      '   /__[]____________________[]___\\'
     ].join('\n'),
     description: 'Area 2. Harder fights. Farm iron for real gear.',
     actions: [
@@ -82,11 +96,16 @@ export const nodes: Record<string, WorldNode> = {
     minLevel: 15,
     maxLevel: 25,
     art: [
-      '  _____________',
-      ' |  [] [] []   |',
-      ' |  ?? ?? ??   |',
-      ' |___      ____|',
-      '     \\____/'
+      '        _________________________',
+      '       /  []   []   []   []      \\',
+      '      /___________________________\\',
+      '      |  ??   ??   ??   ??   ??  |',
+      '      |  []   []   []   []   []  |',
+      '      |~~~~~~~ waterline ~~~~~~~~|',
+      '      |   __        ____      __ |',
+      '      |__/  \\______/    \\____/  \\|',
+      '          drowned pages drift...',
+      '             < < <  glyph ink'
     ].join('\n'),
     description: 'Area 3. Pages, cursed scraps and dangerous drops.',
     actions: [
@@ -104,13 +123,16 @@ export const nodes: Record<string, WorldNode> = {
     minLevel: 1,
     maxLevel: 25,
     art: [
-      '      ______',
-      '     / ____ \\',
-      '    | |____| |',
-      '    |  ____  |',
-      '    | |____| |',
-      '    |________|',
-      '       FIRE'
+      '             _____________',
+      '            /  _________  \\',
+      '           /  /  _____  \\  \\',
+      '          |  |  |     |  |  |',
+      '          |  |  | FIRE|  |  |',
+      '          |  |  |_____|  |  |',
+      '          |  |___________|  |',
+      '          |   ___     ___   |',
+      '          |__/###\\___/###\\__|',
+      '             sparks  *  *'
     ].join('\n'),
     description: 'Rotating stock. If you see a great item, farm fast.',
     actions: [
@@ -126,12 +148,16 @@ export const nodes: Record<string, WorldNode> = {
     minLevel: 20,
     maxLevel: 30,
     art: [
-      '      _________',
-      '   __/  Ø   Ø  \\__',
-      '  |      ___      |',
-      '  |   \\_______/   |',
-      '   \\_____________/',
-      '       THE WATCHER'
+      '          _________________',
+      '      ___/   Ø       Ø     \\___',
+      '     /        _______          \\',
+      '    |      __/       \\__        |',
+      '    |     /  WATCHER    \\       |',
+      '    |     \\__       ___/        |',
+      '     \\       \\_____/          /',
+      '      \\______________________/',
+      '             sealed gate',
+      '          do not wake it'
     ].join('\n'),
     description: 'Boss fight. Upgrade before trying.',
     actions: [

@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { game } from '../state/gameStore';
+  import { game, saveKeyForSlot, saveSlots, type SaveSlot } from '../state/gameStore';
   import { nodes, areaOrder } from '../data/world';
   import { itemCatalogByArea, materialInfo } from '../data/items';
   import { enemies, enemiesByArea } from '../data/enemies';
   import { combatStep } from '../systems/combat';
   import { attackPower, defensePower, luckPower } from '../systems/player';
-  import type { ActionId, Item, NodeAction, Rarity } from '../types/game';
+  import type { ActionId, Item, ItemSlot, NodeAction, Rarity } from '../types/game';
 
   let combatTimer: ReturnType<typeof setInterval> | null = null;
   let clockTimer: ReturnType<typeof setInterval> | null = null;
@@ -14,11 +14,51 @@
   let wikiOpen = $state(false);
   let selectedItem = $state<Item | null>(null);
   let viewedForgeItem = $state<Item | null>(null);
-  let resetOpen = $state(false);
+  let optionsOpen = $state(false);
+  let newGameConfirmOpen = $state(false);
   let nowTime = $state(Date.now());
+  let menuOpen = $state(true);
+  let hasSave = $state(false);
+  let tutorialOpen = $state(false);
+  let tutorialStep = $state(0);
+  let selectedSlot = $state<SaveSlot>('slot-1');
+  let slotHasSave = $state<Record<SaveSlot, boolean>>({
+    'slot-1': false,
+    'slot-2': false,
+    'slot-3': false
+  });
 
-  onMount(() => {
-    game.boot();
+  const tutorialSeenKey = 'glyphbound-tutorial-v1';
+  const equipmentSlots: ItemSlot[] = ['weapon', 'armor', 'charm', 'relic'];
+
+  const tutorialSteps = [
+  {
+    target: '.stat-card',
+    title: 'Your character',
+    text: 'HP, XP, gold and progression live here.'
+  },
+  {
+    target: '.place-actions',
+    title: 'Actions',
+    text: 'Choose where to go and what to do.'
+  },
+  {
+    target: '.ascii-menu',
+    title: 'Menu',
+    text: 'Inventory, wiki and options.'
+  },
+  {
+    target: '.log-box',
+    title: 'Activity log',
+    text: 'Recent events are tracked here.'
+  }
+];
+
+    onMount(() => {
+      refreshSaveSlots();
+      game.boot(selectedSlot);
+
+      menuOpen = true;
 
     clockTimer = setInterval(() => {
       nowTime = Date.now();
@@ -72,6 +112,7 @@
   const wikiItemCount = $derived(Object.keys($game.wiki.items).length);
   const wikiEnemyCount = $derived(Object.keys($game.wiki.enemies).length);
   const wikiRareCount = $derived(Object.keys($game.wiki.rareEnemies).length);
+  
 
   function hpBar(value: number, max: number, size: number) {
     const filled = Math.max(0, Math.min(size, Math.round((value / max) * size)));
@@ -131,6 +172,49 @@
     }
 
     game.equip(selectedItem);
+  }
+
+  function nextTutorial() {
+    if (tutorialStep >= tutorialSteps.length - 1) {
+      closeTutorial();
+      return;
+    }
+
+    tutorialStep++;
+  }
+
+  function closeTutorial() {
+    tutorialOpen = false;
+    localStorage.setItem(tutorialSeenKey, '1');
+  }
+
+  function startNewGame() {
+    game.setSlot(selectedSlot);
+    game.reset();
+    localStorage.removeItem(tutorialSeenKey);
+    tutorialStep = 0;
+    tutorialOpen = true;
+    refreshSaveSlots();
+    hasSave = true;
+    menuOpen = false;
+    newGameConfirmOpen = false;
+    optionsOpen = false;
+  }
+
+  function refreshSaveSlots() {
+    slotHasSave = {
+      'slot-1': Boolean(localStorage.getItem(saveKeyForSlot('slot-1'))),
+      'slot-2': Boolean(localStorage.getItem(saveKeyForSlot('slot-2'))),
+      'slot-3': Boolean(localStorage.getItem(saveKeyForSlot('slot-3')))
+    };
+
+    hasSave = slotHasSave[selectedSlot];
+  }
+
+  function selectSaveSlot(slot: SaveSlot) {
+    selectedSlot = slot;
+    hasSave = slotHasSave[slot];
+    game.setSlot(slot);
   }
 
   function actionIcon(action: ActionId) {
@@ -240,18 +324,109 @@
   }
 </script>
 
-<svelte:head>
-  <title>Glyphbound</title>
-</svelte:head>
+{#if menuOpen}
+  <div class="main-menu">
+    <div class="menu-frame">
+      <pre class="menu-art left-art">
+        .          .
+       / \        / \
+      / _ \      / _ \
+     / / \ \____/ / \ \
+    /_/   \______/_/  \_\
+       .-._  ||  _.-.
+      /  _ \ || / _  \
+     |  / \ \||/ / \  |
+     |  \_/ /||\ \_/  |
+      \____/ || \____/
+          ___||___
+         /   ||   \
+        /____||____\
+      </pre>
 
-<main class="game-screen">
-  <aside class="side-panel left-panel">
-    <pre class="ascii-box title-box">+--------------------+
+      <div class="menu-center">
+        <pre class="menu-logo">
+ ██████╗ ██╗  ██╗██╗   ██╗██████╗ ██╗  ██╗██████╗  ██████╗ ██╗   ██╗███╗   ██╗██████╗
+██╔════╝ ██║  ██║╚██╗ ██╔╝██╔══██╗██║  ██║██╔══██╗██╔═══██╗██║   ██║████╗  ██║██╔══██╗
+██║  ███╗███████║ ╚████╔╝ ██████╔╝███████║██████╔╝██║   ██║██║   ██║██╔██╗ ██║██║  ██║
+██║   ██║██╔══██║  ╚██╔╝  ██╔═══╝ ██╔══██║██╔══██╗██║   ██║██║   ██║██║╚██╗██║██║  ██║
+╚██████╔╝██║  ██║   ██║   ██║     ██║  ██║██████╔╝╚██████╔╝╚██████╔╝██║ ╚████║██████╔╝
+ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝     ╚═╝  ╚═╝╚═════╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝
+        </pre>
+
+        <pre class="menu-subtitle">+------------------------------------------------------------+
+|          fragments wake where broken glyphs remain          |
++------------------------------------------------------------+</pre>
+
+        <div class="save-slots">
+          {#each saveSlots as slot, index}
+            <button type="button" class:selected={selectedSlot === slot} onclick={() => selectSaveSlot(slot)}>
+              [ SLOT {index + 1} ] {slotHasSave[slot] ? 'SAVE FOUND' : 'EMPTY'}
+            </button>
+          {/each}
+        </div>
+
+        <div class="menu-actions">
+          {#if hasSave}
+            <button type="button" onclick={() => { game.setSlot(selectedSlot); newGameConfirmOpen = false; menuOpen = false; }}>[ CONTINUE ]</button>
+          {/if}
+
+          <button type="button" onclick={() => slotHasSave[selectedSlot] ? newGameConfirmOpen = true : startNewGame()}>[ NEW GAME ]</button>
+        </div>
+
+        <div class="menu-hint">
+          <span>ASCII action RPG / assisted combat / cursed progression</span>
+        </div>
+      </div>
+
+      <pre class="menu-art right-art">
+              /\ 
+             /  \
+            / /\ \
+           / ____ \
+          /_/    \_\
+             ||
+          ___||___
+         /   ||   \
+        /_   ||   _\
+          |  ||  |
+          |  ||  |
+       ___|  ||  |___
+      /___   ||   ___\
+          |__||__|
+             /\
+            /__\
+        </pre>
+    </div>
+
+    <div class="menu-footer">
+      <span>v0.1 first region</span>
+      <span>press new game to begin the fracture</span>
+    </div>
+
+    {#if newGameConfirmOpen}
+      <div class="modal-backdrop" role="presentation" onclick={() => newGameConfirmOpen = false} onkeydown={(event) => event.key === 'Escape' && (newGameConfirmOpen = false)}>
+        <section class="confirm-modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(event) => event.stopPropagation()} onkeydown={(event) => event.stopPropagation()}>
+        <pre class="modal-title">+------------------------------+
+|        OVERWRITE SAVE?       |
++------------------------------+</pre>
+          <p>This will erase your current run and start a new one.</p>
+          <div class="confirm-actions">
+            <button type="button" class="modal-button danger-button" onclick={startNewGame}>[ yes, start new game ]</button>
+            <button type="button" class="modal-button" onclick={() => newGameConfirmOpen = false}>[ cancel ]</button>
+          </div>
+        </section>
+      </div>
+    {/if}
+  </div>
+{:else}
+  <main class="game-screen">
+    <aside class="side-panel left-panel">
+      <pre class="ascii-box title-box">+--------------------+
 |    GLYPHBOUND      |
 |    first region    |
 +--------------------+</pre>
 
-    <div class="stat-card">
+    <div class="stat-card" class:tutorial-focus={tutorialOpen && tutorialSteps[tutorialStep].target === '.stat-card'}>
       <div class="stat-card-title">[@] The Fragment</div>
 
       <div class="big-stats">
@@ -277,11 +452,11 @@
       {/each}
     </div>
 
-    <nav class="ascii-menu" aria-label="main menu">
+    <nav class="ascii-menu" class:tutorial-focus={tutorialOpen && tutorialSteps[tutorialStep].target === '.ascii-menu'} aria-label="main menu">
       <button type="button" onclick={() => game.act('back-village')}>+--------------------+<br />|      VILLAGE       |<br />+--------------------+</button>
       <button type="button" onclick={() => inventoryOpen = true}>+--------------------+<br />| INVENTORY / EQUIP  |<br />+--------------------+</button>
       <button type="button" onclick={() => wikiOpen = true}>+--------------------+<br />|        WIKI        |<br />+--------------------+</button>
-      <button type="button" class="danger-menu" onclick={() => resetOpen = true}>+--------------------+<br />|      OPTIONS       |<br />+--------------------+</button>
+      <button type="button" class="danger-menu" onclick={() => optionsOpen = true}>+--------------------+<br />|      OPTIONS       |<br />+--------------------+</button>
     </nav>
   </aside>
 
@@ -360,7 +535,7 @@
         {/if}
       </div>
 
-      <div class="place-actions">
+      <div class="place-actions" class:tutorial-focus={tutorialOpen && tutorialSteps[tutorialStep].target === '.place-actions'}>
         {#each currentNode.actions as action}
           <button type="button" class={`ascii-action ${actionClass(action)}`} disabled={actionDisabled(action)} title={action.help} onclick={() => game.act(action.id)}>
             <span>[{actionIcon(action.id)}]</span>
@@ -402,7 +577,7 @@
     <div class="equipment-panel">
       <div class="panel-label">Equipment</div>
 
-      {#each ['weapon', 'armor', 'charm', 'relic'] as slot}
+      {#each equipmentSlots as slot}
         {@const item = $game.player.equipment[slot]}
         <div class={`equipment-row ${item ? rarityClass(item.rarity) : ''}`}>
           <span>{slot === 'weapon' ? '⚔' : slot === 'armor' ? '🛡' : slot === 'charm' ? '◇' : '✕'}</span>
@@ -418,7 +593,7 @@
       <div><span>Rare mobs</span><strong>{wikiRareCount}</strong></div>
     </div>
 
-    <section class="log-box">
+    <section class="log-box" class:tutorial-focus={tutorialOpen && tutorialSteps[tutorialStep].target === '.log-box'}>
       <div class="log-title">+---------- LOG ----------+</div>
       <div class="log-lines">
         {#each $game.log as line}
@@ -436,7 +611,7 @@
   {/if}
 
   {#if inventoryOpen}
-    <div class="modal-backdrop" role="presentation" onclick={() => inventoryOpen = false}>
+    <div class="modal-backdrop" role="presentation" onclick={() => inventoryOpen = false} onkeydown={(event) => event.key === 'Escape' && (inventoryOpen = false)}>
       <section class="inventory-modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(event) => event.stopPropagation()} onkeydown={(event) => event.stopPropagation()}>
         <pre class="modal-title">+------------------------------------------------------------+
 |                    INVENTORY / EQUIPMENT                   |
@@ -520,7 +695,7 @@
   {/if}
 
   {#if wikiOpen}
-    <div class="modal-backdrop" role="presentation" onclick={() => wikiOpen = false}>
+    <div class="modal-backdrop" role="presentation" onclick={() => wikiOpen = false} onkeydown={(event) => event.key === 'Escape' && (wikiOpen = false)}>
       <section class="inventory-modal wiki-modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(event) => event.stopPropagation()} onkeydown={(event) => event.stopPropagation()}>
         <pre class="modal-title">+------------------------------------------------------------+
 |                          WIKI                              |
@@ -590,19 +765,43 @@
     </div>
   {/if}
 
-  {#if resetOpen}
-    <div class="modal-backdrop" role="presentation" onclick={() => resetOpen = false}>
-      <section class="confirm-modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(event) => event.stopPropagation()}>
+  {#if optionsOpen}
+    <div class="modal-backdrop" role="presentation" onclick={() => optionsOpen = false} onkeydown={(event) => event.key === 'Escape' && (optionsOpen = false)}>
+      <section class="confirm-modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(event) => event.stopPropagation()} onkeydown={(event) => event.stopPropagation()}>
         <pre class="modal-title">+------------------------------+
-|        DESTROY SAVE?         |
+|           OPTIONS            |
 +------------------------------+</pre>
-        <p>This deletes all progress, inventory, forge stock and wiki discovery.</p>
+        <p>Your progress is saved automatically.</p>
         <div class="confirm-actions">
-          <button type="button" class="modal-button danger-button" onclick={() => { game.reset(); resetOpen = false; }}>[ yes, destroy save ]</button>
-          <button type="button" class="modal-button" onclick={() => resetOpen = false}>[ cancel ]</button>
+          <button type="button" class="modal-button" onclick={() => { optionsOpen = false; inventoryOpen = false; wikiOpen = false; menuOpen = true; }}>[ back to main menu ]</button>
+          <button type="button" class="modal-button" onclick={() => optionsOpen = false}>[ close ]</button>
         </div>
       </section>
     </div>
   {/if}
 
+  {#if tutorialOpen}
+    <div class="tutorial-backdrop"></div>
+
+    <div class="tutorial-arrow">
+      ↓
+    </div>
+
+    <div class="tutorial-card">
+      <strong>{tutorialSteps[tutorialStep].title}</strong>
+      <p>{tutorialSteps[tutorialStep].text}</p>
+
+      <div class="tutorial-actions">
+        <button type="button" onclick={closeTutorial}>
+          Skip
+        </button>
+
+        <button type="button" onclick={nextTutorial}>
+          {tutorialStep === tutorialSteps.length - 1 ? 'Finish' : 'Next'}
+        </button>
+      </div>
+    </div>
+  {/if}
+
 </main>
+{/if}

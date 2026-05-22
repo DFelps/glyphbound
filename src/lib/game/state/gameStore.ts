@@ -7,7 +7,22 @@ import { createPlayer } from '../systems/player';
 import { between, roll } from '../systems/random';
 import { startCombat } from '../systems/combat';
 
-const saveKey = 'glyphbound-save-v6-completion';
+const baseSaveKey = 'glyphbound-save-v6-completion';
+
+export const saveSlots = ['slot-1', 'slot-2', 'slot-3'] as const;
+
+export type SaveSlot = typeof saveSlots[number];
+
+let activeSaveKey = `${baseSaveKey}:slot-1`;
+
+export function saveKeyForSlot(slot: SaveSlot) {
+  return `${baseSaveKey}:${slot}`;
+}
+
+function setActiveSaveSlot(slot: SaveSlot) {
+  activeSaveKey = saveKeyForSlot(slot);
+}
+
 const forgeRefreshMs = 120000;
 
 function now(): number {
@@ -60,7 +75,7 @@ function loadState(): GameState {
     return fresh;
   }
 
-  const raw = localStorage.getItem(saveKey);
+  const raw = localStorage.getItem(activeSaveKey) ?? localStorage.getItem(baseSaveKey);
 
   if (!raw) {
     return fresh;
@@ -153,7 +168,7 @@ function saveState(state: GameState): void {
     return;
   }
 
-  localStorage.setItem(saveKey, JSON.stringify(state));
+  localStorage.setItem(activeSaveKey, JSON.stringify(state));
 }
 
 function cloneState(state: GameState): GameState {
@@ -485,7 +500,13 @@ function createGameStore() {
 
   return {
     subscribe: store.subscribe,
-    boot() {
+   boot(slot: SaveSlot = 'slot-1') {
+      setActiveSaveSlot(slot);
+      store.set(loadState());
+      ready = true;
+    },
+    setSlot(slot: SaveSlot) {
+      setActiveSaveSlot(slot);
       store.set(loadState());
       ready = true;
     },
@@ -525,10 +546,16 @@ function createGameStore() {
     },
     reset() {
       const fresh = initialState();
+
       if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem(saveKey);
+        localStorage.removeItem(activeSaveKey);
       }
+
       store.set(fresh);
+
+      if (ready) {
+        saveState(fresh);
+      }
     },
     rawUpdate: update
   };
