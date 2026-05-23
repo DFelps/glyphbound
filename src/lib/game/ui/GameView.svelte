@@ -18,6 +18,7 @@
   let newGameConfirmOpen = $state(false);
   let nowTime = $state(Date.now());
   let menuOpen = $state(true);
+  let gathering = $state(false);
   let hasSave = $state(false);
   let tutorialOpen = $state(false);
   let tutorialStep = $state(0);
@@ -174,6 +175,22 @@
     game.equip(selectedItem);
   }
 
+  function logClass(line: string) {
+    if (line.startsWith('[item]')) {
+      return 'log-item';
+    }
+
+    if (line.startsWith('[material]')) {
+      return 'log-material';
+    }
+
+    return '';
+  }
+
+  function logText(line: string) {
+    return line.replace(/^\[(item|material)\]\s*/, '');
+  }
+
   function nextTutorial() {
     if (tutorialStep >= tutorialSteps.length - 1) {
       closeTutorial();
@@ -186,6 +203,19 @@
   function closeTutorial() {
     tutorialOpen = false;
     localStorage.setItem(tutorialSeenKey, '1');
+  }
+
+  function gatherWithDelay() {
+    if (gathering || $game.combat.active) {
+      return;
+    }
+
+    gathering = true;
+
+    setTimeout(() => {
+      game.act('gather');
+      gathering = false;
+    }, 1800);
   }
 
   function startNewGame() {
@@ -537,9 +567,9 @@
 
       <div class="place-actions" class:tutorial-focus={tutorialOpen && tutorialSteps[tutorialStep].target === '.place-actions'}>
         {#each currentNode.actions as action}
-          <button type="button" class={`ascii-action ${actionClass(action)}`} disabled={actionDisabled(action)} title={action.help} onclick={() => game.act(action.id)}>
+          <button type="button" class={`ascii-action ${actionClass(action)}`} disabled={actionDisabled(action) || gathering} title={action.help} onclick={() => action.id === 'gather' ? gatherWithDelay() : game.act(action.id)}>
             <span>[{actionIcon(action.id)}]</span>
-            <strong>{action.label}</strong>
+            <strong class:gathering-text={gathering && action.id === 'gather'}>{gathering && action.id === 'gather' ? 'Gathering...' : action.label}</strong>
             {#if actionMeta(action)}
               <em>{actionMeta(action)}</em>
             {/if}
@@ -551,7 +581,7 @@
 
     {#if $game.combat.active && $game.combat.enemy}
       <div class="combat-overlay">
-        <pre class="combat-card">+------------------------------------------+
+        <pre class="combat-card" class:rare-enemy={$game.combat.enemy.rare}>+------------------------------------------+
 |             ASSISTED COMBAT              |
 +------------------------------------------+
 {$game.combat.enemy.art}
@@ -597,7 +627,7 @@
       <div class="log-title">+---------- LOG ----------+</div>
       <div class="log-lines">
         {#each $game.log as line}
-          <p>&gt; {line}</p>
+          <p class={logClass(line)}>&gt; {logText(line)}</p>
         {/each}
       </div>
     </section>
@@ -648,7 +678,7 @@
                 <div class="item-meta">
                   <span>slot</span><strong>{currentPreview.slot}</strong>
                   <span>rarity</span><strong>{currentPreview.rarity}</strong>
-                  <span>level</span><strong>{currentPreview.level}</strong>
+                  <span>requires</span><strong>lvl {currentPreview.level}</strong>
                   <span>cost</span><strong>{costText(currentPreview)}</strong>
                 </div>
 

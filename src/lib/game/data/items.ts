@@ -5,6 +5,7 @@ type ItemCatalogEntry = {
   name: string;
   slot: ItemSlot;
   minLevel: number;
+  rarity?: Rarity;
   source: string;
   text: string;
   art?: string;
@@ -20,10 +21,10 @@ const rarityConfig: Record<Rarity, {
   statRolls: number;
 }> = {
   normal: { label: 'Normal', multiplier: 1, cost: 1, materials: 1, statRolls: 0 },
-  rare: { label: 'Rare', multiplier: 1.7, cost: 3, materials: 2, statRolls: 1 },
-  epic: { label: 'Epic', multiplier: 2.9, cost: 14, materials: 6, statRolls: 2 },
-  legendary: { label: 'Legendary', multiplier: 4.8, cost: 46, materials: 14, statRolls: 3 },
-  unique: { label: 'Unique', multiplier: 7.8, cost: 150, materials: 34, statRolls: 5 }
+  rare: { label: 'Rare', multiplier: 1.25, cost: 2.4, materials: 2, statRolls: 1 },
+  epic: { label: 'Epic', multiplier: 1.55, cost: 6, materials: 4, statRolls: 2 },
+  legendary: { label: 'Legendary', multiplier: 2.2, cost: 18, materials: 10, statRolls: 3 },
+  unique: { label: 'Unique', multiplier: 3.2, cost: 45, materials: 22, statRolls: 5 }
 };
 
 const slots: Record<ItemSlot, {
@@ -58,6 +59,39 @@ export const areaNames: Record<AreaId, string> = {
   'rust-mine': 'Rust Mine',
   'sunken-library': 'Sunken Library'
 };
+
+const groveRareItems = new Set([
+  'grove-green-eye',
+  'grove-root-coin',
+  'grove-null-bark'
+]);
+
+const groveEpicItems = new Set([
+  'grove-first-root',
+  'grove-dealer-leaf'
+]);
+
+function catalogRarity(entry: ItemCatalogEntry, area: AreaId): Rarity {
+  if (entry.rarity) {
+    return entry.rarity;
+  }
+
+  if (area === 'glyphroot-grove') {
+    if (groveEpicItems.has(entry.id)) return 'epic';
+    if (groveRareItems.has(entry.id)) return 'rare';
+    return 'normal';
+  }
+
+  if (entry.source.toLowerCase().includes('very rare')) {
+    return 'epic';
+  }
+
+  if (entry.source.toLowerCase().includes('rare')) {
+    return 'rare';
+  }
+
+  return 'normal';
+}
 
 export const materialInfo: Record<string, {
   label: string;
@@ -174,26 +208,84 @@ export const starterArmor = makeFixedItem({
 });
 
 export function rollForgeStock(area: AreaId, count = 4): Item[] {
-  return Array.from({ length: count }, () => generateForgeItem(area));
+  return Array.from({ length: count }, () => {
+    const sourceArea = pickForgeArea(area);
+    return generateForgeItem(sourceArea);
+  });
 }
 
 export function generateLootItem(area: AreaId): Item {
-  const rarity = rollRarity({ unique: 0.01, legendary: 0.04, epic: 0.12, rare: 0.24 });
-  return generateItem(area, rarity);
+  return generateItem(area, rollLootRarity(area));
 }
 
 export function generateForgeItem(area: AreaId): Item {
-  return generateItem(area, rollForgeRarity());
+  return generateItem(area, rollForgeRarity(area));
 }
 
-export function rollForgeRarity(): Rarity {
+function rollLootRarity(area: AreaId): Rarity {
   const value = Math.random();
 
-  if (value < 0.8) return 'normal';
-  if (value < 0.9) return 'rare';
-  if (value < 0.97) return 'epic';
-  if (value < 0.995) return 'legendary';
+  if (area === 'glyphroot-grove') {
+    if (value < 0.006) return 'epic';
+    if (value < 0.04) return 'rare';
+    return 'normal';
+  }
+
+  if (area === 'rust-mine') {
+    if (value < 0.0015) return 'legendary';
+    if (value < 0.025) return 'epic';
+    if (value < 0.14) return 'rare';
+    return 'normal';
+  }
+
+  if (value < 0.002) return 'unique';
+  if (value < 0.012) return 'legendary';
+  if (value < 0.055) return 'epic';
+  if (value < 0.19) return 'rare';
+  return 'normal';
+}
+
+export function rollForgeRarity(area: AreaId): Rarity {
+  const value = Math.random();
+
+  if (area === 'glyphroot-grove') {
+    if (value < 0.78) return 'normal';
+    if (value < 0.95) return 'rare';
+    return 'epic';
+  }
+
+  if (area === 'rust-mine') {
+    if (value < 0.68) return 'normal';
+    if (value < 0.88) return 'rare';
+    if (value < 0.985) return 'epic';
+    return 'legendary';
+  }
+
+  if (value < 0.58) return 'normal';
+  if (value < 0.8) return 'rare';
+  if (value < 0.95) return 'epic';
+  if (value < 0.992) return 'legendary';
   return 'unique';
+}
+
+function pickForgeArea(area: AreaId): AreaId {
+  if (area === 'glyphroot-grove') {
+    return 'glyphroot-grove';
+  }
+
+  if (area === 'rust-mine') {
+    return Math.random() < 0.75 ? 'rust-mine' : 'glyphroot-grove';
+  }
+
+  if (area === 'sunken-library') {
+    const value = Math.random();
+
+    if (value < 0.62) return 'sunken-library';
+    if (value < 0.86) return 'rust-mine';
+    return 'glyphroot-grove';
+  }
+
+  return 'glyphroot-grove';
 }
 
 function rollRarity(boost: Partial<Record<Rarity, number>>): Rarity {
@@ -211,8 +303,9 @@ function rollRarity(boost: Partial<Record<Rarity, number>>): Rarity {
 }
 
 function generateItem(area: AreaId, rarity: Rarity): Item {
-  const entries = itemCatalogByArea[area];
-  const entry = pick(entries);
+  const entries = itemCatalogByArea[area].filter((entry) => catalogRarity(entry, area) === rarity);
+  const fallbackEntries = itemCatalogByArea[area].filter((entry) => catalogRarity(entry, area) === 'normal');
+  const entry = pick(entries.length ? entries : fallbackEntries);
   const config = rarityConfig[rarity];
   const levelRange = levelRangeFor(area);
   const level = between(Math.max(levelRange.min, entry.minLevel), levelRange.max);
@@ -304,9 +397,9 @@ function statsFor(slot: ItemSlot, power: number, rarity: Rarity) {
 }
 
 function levelRangeFor(area: AreaId) {
-  if (area === 'glyphroot-grove') return { min: 1, max: 10 };
-  if (area === 'rust-mine') return { min: 8, max: 18 };
-  return { min: 15, max: 25 };
+  if (area === 'glyphroot-grove') return { min: 1, max: 20 };
+  if (area === 'rust-mine') return { min: 8, max: 35 };
+  return { min: 15, max: 50 };
 }
 
 function basePowerFor(slot: ItemSlot): number {

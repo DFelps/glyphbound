@@ -1,19 +1,18 @@
-import type { GameState, Item } from '../types/game';
-import { gachaTable } from '../data/items';
-import { pick, roll } from './random';
+import type { GameState } from '../types/game';
+import { generateLootItem } from '../data/items';
+import { roll } from './random';
 
 export function drawGacha(state: GameState): void {
-  const discount = state.event?.id === 'merchant-static' ? 80 : 120;
+  const price = 120;
 
-  if (state.player.gold < discount) {
+  if (state.player.gold < price) {
     state.log.unshift('The Dealer smiles. Not enough gold.');
     return;
   }
 
-  state.player.gold -= discount;
+  state.player.gold -= price;
 
   const chance = Math.random();
-  let item: Item | null = null;
 
   if (chance < 0.55) {
     state.log.unshift('The Dealer gave you dust. It looks almost valuable.');
@@ -22,14 +21,23 @@ export function drawGacha(state: GameState): void {
 
   if (chance < 0.75) {
     state.player.materials.glyphroot += 1;
-    state.log.unshift('You pulled Glyphroot.');
+    state.log.unshift('[material] You pulled Glyphroot.');
     return;
   }
 
-  item = structuredClone(pick(gachaTable));
+  const item = generateLootItem('glyphroot-grove');
   item.id = `${item.id}-${Date.now()}`;
+
   state.player.inventory.push(item);
-  state.log.unshift(`You pulled ${item.name}.`);
+  state.wiki.items[item.catalogId ?? item.templateId] = true;
+
+  state.notice = {
+    title: `${item.rarity.toUpperCase()} ITEM DROP`,
+    message: `${item.name} was added to your inventory.`,
+    kind: 'item'
+  };
+
+  state.log.unshift(`[item] You pulled ${item.rarity.toUpperCase()} ${item.name}.`);
 }
 
 export function upgradeEquippedWeapon(state: GameState): void {
@@ -49,14 +57,15 @@ export function upgradeEquippedWeapon(state: GameState): void {
 
   if (roll(0.6)) {
     weapon.power += 1;
-    state.log.unshift(`${weapon.name} grew sharper. Power +1.`);
+    weapon.stats.attack += 1;
+    state.log.unshift(`${weapon.name} grew sharper. Attack +1.`);
     return;
   }
 
   if (roll(0.3)) {
     weapon.power = Math.max(1, weapon.power - 1);
-    weapon.unstable = true;
-    state.log.unshift(`${weapon.name} rejected the glyph. Power -1.`);
+    weapon.stats.attack = Math.max(0, weapon.stats.attack - 1);
+    state.log.unshift(`${weapon.name} rejected the glyph. Attack -1.`);
     return;
   }
 

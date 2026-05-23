@@ -228,20 +228,47 @@ function addMaterial(state: GameState, key: string, amount: number): void {
   state.player.materials[key] = (state.player.materials[key] ?? 0) + amount;
 }
 
-function highestUnlockedArea(state: GameState): AreaId {
+function highestForgeArea(state: GameState): AreaId {
   if (state.areaProgress['sunken-library'].cleared) {
     return 'sunken-library';
   }
 
   if (state.areaProgress['rust-mine'].cleared) {
-    return 'sunken-library';
-  }
-
-  if (state.areaProgress['glyphroot-grove'].cleared) {
     return 'rust-mine';
   }
 
   return 'glyphroot-grove';
+}
+
+function gatherTableFor(location: GameState['location']) {
+  if (location === 'glyphroot-grove') {
+    return [
+      ['glyphroot', 0.7],
+      ['wood', 0.25],
+      ['livingbark', 0.05]
+    ] as const;
+  }
+
+  if (location === 'rust-mine') {
+    return [
+      ['iron', 0.68],
+      ['crystal', 0.08],
+      ['wood', 0.16],
+      ['glyphroot', 0.08]
+    ] as const;
+  }
+
+  if (location === 'sunken-library') {
+    return [
+      ['pages', 0.62],
+      ['ink', 0.18],
+      ['nullscrap', 0.04],
+      ['crystal', 0.08],
+      ['glyphroot', 0.08]
+    ] as const;
+  }
+
+  return [];
 }
 
 function randomEnemyFor(location: WorldNodeId): Enemy {
@@ -253,7 +280,7 @@ function randomEnemyFor(location: WorldNodeId): Enemy {
   const rare = ids.filter((id) => cloneEnemy(id as keyof typeof enemies).rare);
   const common = ids.filter((id) => !cloneEnemy(id as keyof typeof enemies).rare);
 
-  if (rare.length && roll(location === 'glyphroot-grove' ? 0.08 : 0.035)) {
+  if (rare.length && roll(location === 'glyphroot-grove' ? 0.025 : 0.018)) {
     return cloneEnemy(rare[between(0, rare.length - 1)] as keyof typeof enemies);
   }
 
@@ -263,20 +290,21 @@ function randomEnemyFor(location: WorldNodeId): Enemy {
 function gatherFor(state: GameState, location: AreaId): void {
   const table: Record<AreaId, [string, number][]> = {
     'glyphroot-grove': [
-      ['glyphroot', between(1, 3)],
-      ['wood', between(1, 2)],
-      ['bark', roll(0.28) ? 1 : 0]
+      ['glyphroot', 1],
+      ['wood', roll(0.35) ? 1 : 0],
+      ['bark', roll(0.08) ? 1 : 0]
     ],
     'rust-mine': [
-      ['iron', between(1, 3)],
-      ['crystal', roll(0.18) ? 1 : 0],
-      ['wood', roll(0.3) ? 1 : 0]
+      ['iron', 1],
+      ['crystal', roll(0.08) ? 1 : 0],
+      ['wood', roll(0.18) ? 1 : 0],
+      ['glyphroot', roll(0.12) ? 1 : 0]
     ],
     'sunken-library': [
-      ['pages', between(1, 2)],
-      ['ink', roll(0.22) ? 1 : 0],
-      ['glyphroot', 1],
-      ['nullscrap', roll(0.12) ? 1 : 0]
+      ['pages', 1],
+      ['ink', roll(0.12) ? 1 : 0],
+      ['nullscrap', roll(0.04) ? 1 : 0],
+      ['crystal', roll(0.06) ? 1 : 0]
     ]
   };
 
@@ -291,10 +319,10 @@ function gatherFor(state: GameState, location: AreaId): void {
     found.push(`${value} ${key}`);
   }
 
-  state.log.unshift(`Gathered ${found.join(', ')}.`);
+  state.log.unshift(`[material] Gathered ${found.join(', ')}.`);
   state.areaProgress[location].gathered += 1;
 
-  if (roll(nodes[location].danger * 0.12)) {
+  if (roll(nodes[location].danger * 0.08)) {
     startCombat(state, randomEnemyFor(location), location);
   }
 }
@@ -306,7 +334,7 @@ function refreshForgeIfNeeded(state: GameState): void {
     return;
   }
 
-  const area = highestUnlockedArea(state);
+  const area = highestForgeArea(state);
   state.forge.stock = rollForgeStock(area, 4);
   state.forge.lastRefreshAt = time;
   state.forge.nextRefreshAt = time + forgeRefreshMs;
@@ -314,7 +342,7 @@ function refreshForgeIfNeeded(state: GameState): void {
 }
 
 function manualRefreshForge(state: GameState): void {
-  const area = highestUnlockedArea(state);
+  const area = highestForgeArea(state);
   const time = now();
 
   state.forge.stock = rollForgeStock(area, 4);
@@ -536,6 +564,16 @@ function createGameStore() {
       update((state) => {
         if (!item.slot) {
           state.log.unshift(`${item.name} cannot be equipped.`);
+          return;
+        }
+
+        if (state.player.level < item.level) {
+          state.notice = {
+            title: 'Level Required',
+            message: `${item.name} requires level ${item.level}.`,
+            kind: 'info'
+          };
+          state.log.unshift(`${item.name} requires level ${item.level}.`);
           return;
         }
 

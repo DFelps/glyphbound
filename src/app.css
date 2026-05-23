@@ -1410,3 +1410,34 @@ pre {
   color: var(--gold);
   box-shadow: 0 0 16px rgba(255, 211, 107, 0.14);
 }
+
+.result-notice.item {
+  color: var(--gold);
+}
+
+.log-lines p.log-material {
+  color: var(--gold);
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(255, 211, 107, 0.28);
+}
+
+.log-lines p.log-item {
+  color: var(--green);
+  font-weight: 700;
+  text-shadow: 0 0 12px rgba(98, 255, 73, 0.32);
+}
+
+.rare-enemy {
+  color: var(--gold);
+  text-shadow: 0 0 18px rgba(255, 211, 107, 0.65);
+  animation: rarity-unique 1.15s infinite;
+}
+
+.ascii-action:disabled {
+  filter: grayscale(0.35);
+}
+
+.gathering-text {
+  color: var(--gold);
+  animation: blink-soft 0.7s infinite;
+}

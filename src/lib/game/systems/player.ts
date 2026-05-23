@@ -53,8 +53,15 @@ export function gearDefense(player: Player, slot: ItemSlot): number {
   return player.equipment[slot]?.stats.defense ?? 0;
 }
 
-export function gainXp(player: Player, amount: number): string[] {
+export function gainXp(player: Player, amount: number, maxLevel = Number.POSITIVE_INFINITY): string[] {
   const messages: string[] = [];
+
+  if (player.level >= maxLevel) {
+    player.xp = 0;
+    messages.push(`Area level cap reached. Move forward to grow stronger.`);
+    return messages;
+  }
+
   player.xp += amount;
 
   while (player.xp >= player.nextLevel) {
@@ -64,6 +71,12 @@ export function gainXp(player: Player, amount: number): string[] {
     player.hp = player.maxHp;
     player.nextLevel = Math.floor(player.nextLevel * 1.42 + 8);
     messages.push(`Level up. ${player.name} reached level ${player.level}.`);
+
+    if (player.level >= maxLevel) {
+      player.xp = 0;
+      messages.push(`Area level cap reached. Move forward to grow stronger.`);
+      break;
+    }
   }
 
   return messages;
