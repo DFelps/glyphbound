@@ -103,7 +103,7 @@ export type CombatState = {
 export type GameNotice = {
   title: string;
   message: string;
-  kind: 'victory' | 'defeat' | 'info';
+  kind: 'victory' | 'defeat' | 'info' | 'item';
 };
 
 export type WikiState = {

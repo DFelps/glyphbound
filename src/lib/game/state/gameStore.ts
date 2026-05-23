@@ -7,7 +7,22 @@ import { createPlayer } from '../systems/player';
 import { between, roll } from '../systems/random';
 import { startCombat } from '../systems/combat';
 
-const saveKey = 'glyphbound-save-v6-completion';
+const baseSaveKey = 'glyphbound-save-v6-completion';
+
+export const saveSlots = ['slot-1', 'slot-2', 'slot-3'] as const;
+
+export type SaveSlot = typeof saveSlots[number];
+
+let activeSaveKey = `${baseSaveKey}:slot-1`;
+
+export function saveKeyForSlot(slot: SaveSlot) {
+  return `${baseSaveKey}:${slot}`;
+}
+
+function setActiveSaveSlot(slot: SaveSlot) {
+  activeSaveKey = saveKeyForSlot(slot);
+}
+
 const forgeRefreshMs = 120000;
 
 function now(): number {
@@ -60,7 +75,7 @@ function loadState(): GameState {
     return fresh;
   }
 
-  const raw = localStorage.getItem(saveKey);
+  const raw = localStorage.getItem(activeSaveKey) ?? localStorage.getItem(baseSaveKey);
 
   if (!raw) {
     return fresh;
@@ -153,7 +168,7 @@ function saveState(state: GameState): void {
     return;
   }
 
-  localStorage.setItem(saveKey, JSON.stringify(state));
+  localStorage.setItem(activeSaveKey, JSON.stringify(state));
 }
 
 function cloneState(state: GameState): GameState {
@@ -213,20 +228,47 @@ function addMaterial(state: GameState, key: string, amount: number): void {
   state.player.materials[key] = (state.player.materials[key] ?? 0) + amount;
 }
 
-function highestUnlockedArea(state: GameState): AreaId {
+function highestForgeArea(state: GameState): AreaId {
   if (state.areaProgress['sunken-library'].cleared) {
     return 'sunken-library';
   }
 
   if (state.areaProgress['rust-mine'].cleared) {
-    return 'sunken-library';
-  }
-
-  if (state.areaProgress['glyphroot-grove'].cleared) {
     return 'rust-mine';
   }
 
   return 'glyphroot-grove';
+}
+
+function gatherTableFor(location: GameState['location']) {
+  if (location === 'glyphroot-grove') {
+    return [
+      ['glyphroot', 0.7],
+      ['wood', 0.25],
+      ['livingbark', 0.05]
+    ] as const;
+  }
+
+  if (location === 'rust-mine') {
+    return [
+      ['iron', 0.68],
+      ['crystal', 0.08],
+      ['wood', 0.16],
+      ['glyphroot', 0.08]
+    ] as const;
+  }
+
+  if (location === 'sunken-library') {
+    return [
+      ['pages', 0.62],
+      ['ink', 0.18],
+      ['nullscrap', 0.04],
+      ['crystal', 0.08],
+      ['glyphroot', 0.08]
+    ] as const;
+  }
+
+  return [];
 }
 
 function randomEnemyFor(location: WorldNodeId): Enemy {
@@ -238,7 +280,7 @@ function randomEnemyFor(location: WorldNodeId): Enemy {
   const rare = ids.filter((id) => cloneEnemy(id as keyof typeof enemies).rare);
   const common = ids.filter((id) => !cloneEnemy(id as keyof typeof enemies).rare);
 
-  if (rare.length && roll(location === 'glyphroot-grove' ? 0.08 : 0.035)) {
+  if (rare.length && roll(location === 'glyphroot-grove' ? 0.025 : 0.018)) {
     return cloneEnemy(rare[between(0, rare.length - 1)] as keyof typeof enemies);
   }
 
@@ -248,20 +290,21 @@ function randomEnemyFor(location: WorldNodeId): Enemy {
 function gatherFor(state: GameState, location: AreaId): void {
   const table: Record<AreaId, [string, number][]> = {
     'glyphroot-grove': [
-      ['glyphroot', between(1, 3)],
-      ['wood', between(1, 2)],
-      ['bark', roll(0.28) ? 1 : 0]
+      ['glyphroot', 1],
+      ['wood', roll(0.35) ? 1 : 0],
+      ['bark', roll(0.08) ? 1 : 0]
     ],
     'rust-mine': [
-      ['iron', between(1, 3)],
-      ['crystal', roll(0.18) ? 1 : 0],
-      ['wood', roll(0.3) ? 1 : 0]
+      ['iron', 1],
+      ['crystal', roll(0.08) ? 1 : 0],
+      ['wood', roll(0.18) ? 1 : 0],
+      ['glyphroot', roll(0.12) ? 1 : 0]
     ],
     'sunken-library': [
-      ['pages', between(1, 2)],
-      ['ink', roll(0.22) ? 1 : 0],
-      ['glyphroot', 1],
-      ['nullscrap', roll(0.12) ? 1 : 0]
+      ['pages', 1],
+      ['ink', roll(0.12) ? 1 : 0],
+      ['nullscrap', roll(0.04) ? 1 : 0],
+      ['crystal', roll(0.06) ? 1 : 0]
     ]
   };
 
@@ -276,10 +319,10 @@ function gatherFor(state: GameState, location: AreaId): void {
     found.push(`${value} ${key}`);
   }
 
-  state.log.unshift(`Gathered ${found.join(', ')}.`);
+  state.log.unshift(`[material] Gathered ${found.join(', ')}.`);
   state.areaProgress[location].gathered += 1;
 
-  if (roll(nodes[location].danger * 0.12)) {
+  if (roll(nodes[location].danger * 0.08)) {
     startCombat(state, randomEnemyFor(location), location);
   }
 }
@@ -291,7 +334,7 @@ function refreshForgeIfNeeded(state: GameState): void {
     return;
   }
 
-  const area = highestUnlockedArea(state);
+  const area = highestForgeArea(state);
   state.forge.stock = rollForgeStock(area, 4);
   state.forge.lastRefreshAt = time;
   state.forge.nextRefreshAt = time + forgeRefreshMs;
@@ -299,7 +342,7 @@ function refreshForgeIfNeeded(state: GameState): void {
 }
 
 function manualRefreshForge(state: GameState): void {
-  const area = highestUnlockedArea(state);
+  const area = highestForgeArea(state);
   const time = now();
 
   state.forge.stock = rollForgeStock(area, 4);
@@ -485,7 +528,13 @@ function createGameStore() {
 
   return {
     subscribe: store.subscribe,
-    boot() {
+   boot(slot: SaveSlot = 'slot-1') {
+      setActiveSaveSlot(slot);
+      store.set(loadState());
+      ready = true;
+    },
+    setSlot(slot: SaveSlot) {
+      setActiveSaveSlot(slot);
       store.set(loadState());
       ready = true;
     },
@@ -518,6 +567,16 @@ function createGameStore() {
           return;
         }
 
+        if (state.player.level < item.level) {
+          state.notice = {
+            title: 'Level Required',
+            message: `${item.name} requires level ${item.level}.`,
+            kind: 'info'
+          };
+          state.log.unshift(`${item.name} requires level ${item.level}.`);
+          return;
+        }
+
         state.player.equipment[item.slot] = item;
         discoverItem(state, item);
         state.log.unshift(`Equipped ${item.name}.`);
@@ -525,10 +584,16 @@ function createGameStore() {
     },
     reset() {
       const fresh = initialState();
+
       if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem(saveKey);
+        localStorage.removeItem(activeSaveKey);
       }
+
       store.set(fresh);
+
+      if (ready) {
+        saveState(fresh);
+      }
     },
     rawUpdate: update
   };
