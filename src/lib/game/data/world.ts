@@ -1,8 +1,8 @@
-import type { AreaId, WorldNode } from '../types/game';
+import type { AreaId, WorldNode, WorldNodeId } from '../types/game';
 
 export const areaOrder: AreaId[] = ['glyphroot-grove', 'rust-mine', 'sunken-library'];
 
-export const nodes: Record<string, WorldNode> = {
+export const nodes: Record<WorldNodeId, WorldNode> = {
   village: {
     id: 'village',
     name: 'Glyphbound Village',

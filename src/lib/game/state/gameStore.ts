@@ -7,7 +7,7 @@ import { createPlayer } from '../systems/player';
 import { between, roll } from '../systems/random';
 import { startCombat } from '../systems/combat';
 
-const baseSaveKey = 'glyphbound-save-v6-completion';
+const baseSaveKey = 'glyphbound-save-v12-inventory-fix';
 
 export const saveSlots = ['slot-1', 'slot-2', 'slot-3'] as const;
 
@@ -29,13 +29,26 @@ function now(): number {
   return Date.now();
 }
 
+function areaOneMaterials(existing: Partial<Record<string, number>> = {}) {
+  return {
+    wood: existing.wood ?? 0,
+    iron: existing.iron ?? 0,
+    pages: existing.pages ?? 0,
+    bark: existing.bark ?? 0,
+    crystal: existing.crystal ?? 0,
+    ink: existing.ink ?? 0
+  };
+}
+
 function initialState(): GameState {
   const createdAt = now();
+  const player = createPlayer();
+  player.materials = areaOneMaterials(player.materials);
 
   return {
-    version: 6,
+    version: 11,
     location: 'village',
-    player: createPlayer(),
+    player,
     combat: {
       active: false,
       enemy: null,
@@ -87,14 +100,14 @@ function loadState(): GameState {
     return normalizeState({
       ...fresh,
       ...parsed,
-      version: 6,
+      version: 11,
       player: {
         ...fresh.player,
         ...parsed.player,
-        materials: {
+        materials: areaOneMaterials({
           ...fresh.player.materials,
           ...parsed.player?.materials
-        },
+        }),
         equipment: {
           ...fresh.player.equipment,
           ...parsed.player?.equipment
@@ -149,6 +162,8 @@ function loadState(): GameState {
 }
 
 function normalizeState(state: GameState): GameState {
+  restoreEquippedItemsToInventory(state);
+
   for (const item of state.player.inventory) {
     discoverItem(state, item);
   }
@@ -161,6 +176,19 @@ function normalizeState(state: GameState): GameState {
 
   refreshForgeIfNeeded(state);
   return state;
+}
+
+function restoreEquippedItemsToInventory(state: GameState): void {
+  const inventoryIds = new Set(state.player.inventory.map((item) => item.id));
+
+  for (const item of Object.values(state.player.equipment)) {
+    if (!item || inventoryIds.has(item.id)) {
+      continue;
+    }
+
+    state.player.inventory.unshift(item);
+    inventoryIds.add(item.id);
+  }
 }
 
 function saveState(state: GameState): void {
@@ -240,37 +268,6 @@ function highestForgeArea(state: GameState): AreaId {
   return 'glyphroot-grove';
 }
 
-function gatherTableFor(location: GameState['location']) {
-  if (location === 'glyphroot-grove') {
-    return [
-      ['glyphroot', 0.7],
-      ['wood', 0.25],
-      ['livingbark', 0.05]
-    ] as const;
-  }
-
-  if (location === 'rust-mine') {
-    return [
-      ['iron', 0.68],
-      ['crystal', 0.08],
-      ['wood', 0.16],
-      ['glyphroot', 0.08]
-    ] as const;
-  }
-
-  if (location === 'sunken-library') {
-    return [
-      ['pages', 0.62],
-      ['ink', 0.18],
-      ['nullscrap', 0.04],
-      ['crystal', 0.08],
-      ['glyphroot', 0.08]
-    ] as const;
-  }
-
-  return [];
-}
-
 function randomEnemyFor(location: WorldNodeId): Enemy {
   if (!isAreaId(location)) {
     return cloneEnemy('rootling');
@@ -288,35 +285,36 @@ function randomEnemyFor(location: WorldNodeId): Enemy {
 }
 
 function gatherFor(state: GameState, location: AreaId): void {
-  const table: Record<AreaId, [string, number][]> = {
-    'glyphroot-grove': [
-      ['glyphroot', 1],
-      ['wood', roll(0.35) ? 1 : 0],
-      ['bark', roll(0.08) ? 1 : 0]
-    ],
-    'rust-mine': [
-      ['iron', 1],
-      ['crystal', roll(0.08) ? 1 : 0],
-      ['wood', roll(0.18) ? 1 : 0],
-      ['glyphroot', roll(0.12) ? 1 : 0]
-    ],
-    'sunken-library': [
-      ['pages', 1],
-      ['ink', roll(0.12) ? 1 : 0],
-      ['nullscrap', roll(0.04) ? 1 : 0],
-      ['crystal', roll(0.06) ? 1 : 0]
-    ]
+  const guaranteed: Record<AreaId, string> = {
+    'glyphroot-grove': 'wood',
+    'rust-mine': 'iron',
+    'sunken-library': 'pages'
+  };
+
+  const names: Record<string, string> = {
+    wood: 'Wood',
+    iron: 'Iron',
+    pages: 'Old Pages',
+    bark: 'Living Bark',
+    crystal: 'Fracture Crystal',
+    ink: 'Black Ink'
   };
 
   const found: string[] = [];
+  const common = guaranteed[location];
 
-  for (const [key, value] of table[location]) {
-    if (value <= 0) {
-      continue;
-    }
+  addMaterial(state, common, 1);
+  found.push(`1 ${names[common]}`);
 
-    addMaterial(state, key, value);
-    found.push(`${value} ${key}`);
+  if (roll(0.12)) {
+    const rare = roll(0.5) ? 'bark' : 'crystal';
+    addMaterial(state, rare, 1);
+    found.push(`1 ${names[rare]}`);
+  }
+
+  if (roll(0.025)) {
+    addMaterial(state, 'ink', 1);
+    found.push(`1 ${names.ink}`);
   }
 
   state.log.unshift(`[material] Gathered ${found.join(', ')}.`);
@@ -327,14 +325,37 @@ function gatherFor(state: GameState, location: AreaId): void {
   }
 }
 
+function areaForItem(item: Item): AreaId {
+  if (item.catalogId.startsWith('mine-')) {
+    return 'rust-mine';
+  }
+
+  if (item.catalogId.startsWith('library-')) {
+    return 'sunken-library';
+  }
+
+  return 'glyphroot-grove';
+}
+
+function forgeLevelRange(area: AreaId): { min: number; max: number } {
+  if (area === 'glyphroot-grove') return { min: 1, max: 8 };
+  if (area === 'rust-mine') return { min: 7, max: 14 };
+  return { min: 13, max: 20 };
+}
+
+function stockMatchesArea(state: GameState, area: AreaId): boolean {
+  const range = forgeLevelRange(area);
+  return state.forge.stock.every((item) => areaForItem(item) === area && item.level >= range.min && item.level <= range.max);
+}
+
 function refreshForgeIfNeeded(state: GameState): void {
   const time = now();
+  const area = highestForgeArea(state);
 
-  if (time < state.forge.nextRefreshAt) {
+  if (time < state.forge.nextRefreshAt && stockMatchesArea(state, area)) {
     return;
   }
 
-  const area = highestForgeArea(state);
   state.forge.stock = rollForgeStock(area, 4);
   state.forge.lastRefreshAt = time;
   state.forge.nextRefreshAt = time + forgeRefreshMs;
