@@ -207,16 +207,8 @@ function itemDropChance(enemy: Enemy, luck: number): number {
 }
 
 function levelCapFor(source: GameState['location']): number {
-  if (source === 'glyphroot-grove') {
+  if (isAreaId(source)) {
     return 20;
-  }
-
-  if (source === 'rust-mine') {
-    return 35;
-  }
-
-  if (source === 'sunken-library') {
-    return 50;
   }
 
   return Number.POSITIVE_INFINITY;
