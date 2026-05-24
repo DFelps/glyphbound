@@ -1,112 +1,113 @@
 # GLYPHBOUND
 
 ```txt
-   _____ _                 _     _                           _
-  / ____| |               | |   | |                         | |
- | |  __| |_   _ _ __ ___ | |__ | |__   ___  _   _ _ __   __| |
- | | |_ | | | | | '_ ` _ \| '_ \| '_ \ / _ \| | | | '_ \ / _` |
- | |__| | | |_| | | | | | | |_) | |_) | (_) | |_| | | | | (_| |
-  \_____|_|\__, |_| |_| |_|_.__/|_.__/ \___/ \__,_|_| |_|\__,_|
-            __/ |
-           |___/
+ ██████╗ ██╗  ██╗██╗   ██╗██████╗ ██╗  ██╗██████╗  ██████╗ ██╗   ██╗███╗   ██╗██████╗
+██╔════╝ ██║  ██║╚██╗ ██╔╝██╔══██╗██║  ██║██╔══██╗██╔═══██╗██║   ██║████╗  ██║██╔══██╗
+██║  ███╗███████║ ╚████╔╝ ██████╔╝███████║██████╔╝██║   ██║██║   ██║██╔██╗ ██║██║  ██║
+██║   ██║██╔══██║  ╚██╔╝  ██╔═══╝ ██╔══██║██╔══██╗██║   ██║██║   ██║██║╚██╗██║██║  ██║
+╚██████╔╝██║  ██║   ██║   ██║     ██║  ██║██████╔╝╚██████╔╝╚██████╔╝██║ ╚████║██████╔╝
+ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝     ╚═╝  ╚═╝╚═════╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝
 ```
 
 **ASCII loot progression RPG built with SvelteKit.**
 
-You are **@**, *The Fragment* — a surviving glyph in a collapsing reality.
+Glyphbound is a browser-based progression RPG focused on loot hunting, material farming, gear upgrades, rotating forge economy, and codex completion.
 
-The world is being erased by **The Null**.
+You play as **@, The Fragment** — a surviving glyph in a collapsing reality being erased by **The Null**.
 
-Fight, grind, gather resources, hunt rare monsters, chase rotating forge items, build stronger gear, complete your codex, and eventually challenge **The Watcher**.
+Farm. Upgrade. Discover. Survive.
 
 ---
 
-# CURRENT GAMEPLAY
+## Overview
+
+Glyphbound is designed around satisfying progression loops.
+
+The core gameplay is intentionally simple:
 
 ```txt
-VILLAGE HUB
-   ↓
-Choose area
-   ↓
-Fight monsters / Gather resources
-   ↓
-Upgrade gear / Buy forge loot
-   ↓
-Unlock stronger content
-   ↓
-Challenge boss
-   ↓
-Repeat (harder progression)
+Enter area
+→ Fight enemies
+→ Gather materials
+→ Upgrade gear
+→ Buy forge items
+→ Unlock stronger progression
+→ Challenge bosses
+→ Repeat
 ```
 
-Current gameplay focuses on:
+Combat is assisted.
 
-- click-first interaction
-- assisted combat
-- heavy loot progression
-- rotating forge economy
-- monster discovery
-- item collection / codex completion
-- grind-heavy progression loops
-- rare / unique item hunting
+Progression is the focus.
 
 ---
 
-# FEATURES
+## Features
 
-## Core Systems
+### Progression Gameplay
 
 - Click-first gameplay
-- Assisted auto-combat
-- No potions / mana micromanagement
-- Auto save via `localStorage`
-- Death with no item loss
-- Village hub progression
-- Area-based unlock progression
+- Assisted auto combat
+- Area-based progression
+- Material farming
+- Gear progression
+- Gold economy
+- Boss progression checks
+- Death penalties (without item loss)
+- Auto save via localStorage
 
 ---
 
-## Loot System
+### Loot System
 
 Five rarity tiers:
 
 ```txt
-[ Normal    ] Common progression gear
-[ Rare      ] Better stat scaling
-[ Epic      ] Strong mid/high progression items
-[ Legendary ] Expensive chase gear
-[ Unique    ] Randomized premium loot with strong rolls
+Normal
+Rare
+Epic
+Legendary
+Unique
 ```
 
-Unique items generate randomized stats.
+Loot categories:
+
+- Weapons
+- Armor
+- Charms
+- Relics
+
+Higher rarity gear offers stronger progression paths.
+
+Unique items can roll randomized stat combinations.
 
 Example:
 
 ```txt
 Voidfang Blade
-ATK +18
-DEF +4
-LUCK +9
++18 ATK
++4 DEF
++9 LUCK
 ```
 
 ---
 
-## Forge Market
+### Rotating Forge Market
 
-The forge is now a rotating market.
+The forge acts as a live rotating shop.
 
 ```txt
-Stock refreshes every 2 minutes
+Refresh every 2 minutes
 ```
 
-Meaning:
+This creates decision pressure:
 
-- desirable items can disappear
-- you must farm quickly
-- progression decisions matter
-- expensive items become long-term goals
+- buy now or save gold
+- farm materials for upgrades
+- chase premium gear before stock rotates
+- prioritize short-term vs long-term progression
 
-Drop distribution:
+Forge distribution:
 
 ```txt
 80.0% Normal
@@ -116,51 +117,46 @@ Drop distribution:
  0.5% Unique
 ```
 
-Forge stock scales with progression.
-
-Example:
-
-```txt
-Area 1 → level 1–10 gear
-Area 2 → stronger unlock pool
-Area 3 → advanced progression pool
-```
-
 ---
 
-## Areas
+## Current Content
 
-Current region includes:
+### Region 1
+
+Areas currently available:
 
 ```txt
-[1] Glyphroot Grove
-[2] Rust Mine
-[3] Sunken Library
+1. Glyphroot Grove
+2. Rust Mine
+3. Sunken Library
 ```
 
-Each area contains:
+Material progression:
 
-- unique monsters
-- unique materials
-- loot progression
-- discovery tracking
-
-Example materials:
+### Common
 
 ```txt
 Wood
 Iron
-Glyphroot
-Pages
+Old Pages
+```
+
+### Rare
+
+```txt
 Living Bark
 Fracture Crystal
+```
+
+### Epic
+
+```txt
 Black Ink
-Null Scrap
 ```
 
 ---
 
-## Boss
+## Boss Encounter
 
 Current boss:
 
@@ -168,75 +164,62 @@ Current boss:
 THE WATCHER
 ```
 
-Boss fights are intentionally much harder than standard encounters.
+Bosses are intended to be significant progression checks.
 
-Normal areas teach progression.
+Normal enemies teach farming.
 
-Boss checks build quality.
+Bosses test builds.
 
 ---
 
-## Wiki / Codex
+## Discovery / Codex
 
-Discovery system tracks:
+The discovery system tracks:
 
-### Monsters
+- enemies encountered
+- rare monsters
+- items collected
+- progression milestones
 
-Unknown enemies remain hidden:
+Unknown content remains hidden until discovered.
+
+Example:
 
 ```txt
 ???
-???
-Rootling
 ???
 Mine Crawler
-```
-
-### Items
-
-Undiscovered loot remains hidden:
-
-```txt
-???
-???
-Iron Glyph Blade
 ???
 ```
 
-Completionist grind is intended.
-
-Rare monsters and hidden discoveries are planned.
+Completionist progression is intentional.
 
 ---
 
-# CONTROLS
+## Controls
 
-Primary interaction:
+Primary input:
 
 ```txt
-MOUSE
+Mouse
 ```
 
 Actions include:
 
-- selecting areas
-- entering combat
-- buying forge gear
-- opening inventory
+- selecting locations
+- gathering
+- buying gear
 - equipping items
+- opening inventory
 - navigating menus
 
-Combat is automatic.
-
-Once combat begins:
-
-```txt
-YOU WATCH
-```
+Combat is automatic once started.
 
 ---
 
-# TECH STACK
+## Tech Stack
+
+Built with:
 
 ```txt
 SvelteKit
@@ -245,76 +228,97 @@ CSS
 localStorage persistence
 ```
 
-Planned later:
+Planned:
 
 ```txt
-Electron desktop build
+Electron desktop version
 ```
 
 ---
 
-# INSTALL
+## Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/yourusername/glyphbound.git
+cd glyphbound
+```
+
+Install dependencies:
 
 ```bash
 npm install
+```
+
+Start development server:
+
+```bash
 npm run dev
 ```
 
-Build:
+Build production version:
 
 ```bash
 npm run build
 ```
 
+Preview build:
+
+```bash
+npm run preview
+```
+
 ---
 
-# DESIGN GOALS
+## Design Philosophy
 
-Glyphbound is designed around:
+Glyphbound is built around:
 
 - satisfying progression
-- loot dopamine
-- visible upgrades
-- rare chase items
-- collection completion
-- "just one more run" gameplay
+- visible power growth
+- loot excitement
+- rare item chasing
+- codex completion
+- repeatable progression loops
+- retro terminal aesthetics
 
 Inspirations in spirit:
 
-- idle progression loops
-- loot RPG systems
-- codex completion games
-- ASCII terminal aesthetics
+- loot RPGs
+- incremental progression games
+- collection systems
+- classic terminal interfaces
 
 ---
 
-# ROADMAP
+## Roadmap
 
 Planned systems:
 
-- enchantment system
+- additional regions
+- stronger bosses
+- enchantments
 - item corruption
 - failed upgrades
-- monster variants
+- advanced crafting
 - rare encounter events
 - hidden bosses
-- multiple regions
-- region progression gates
-- advanced crafting
-- legendary hunt loops
-- ultra rare unique chase drops
-- achievement / completion systems
-- desktop release via Electron
+- achievements
+- codex expansion
+- ultra rare loot hunts
+- desktop release
 
 ---
 
-# LORE
+## Lore
 
 ```txt
 Reality was once written.
+
 Now it is being erased.
 ```
 
-You are not a hero.
+You are not a chosen hero.
 
-You are simply a surviving glyph trying not to become nothing.
+You are a fragment trying not to become nothing.
