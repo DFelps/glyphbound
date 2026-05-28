@@ -41,7 +41,10 @@ const slots: Record<ItemSlot, {
 export const areaNames: Record<AreaId, string> = {
   'glyphroot-grove': 'Glyphroot Grove',
   'rust-mine': 'Rust Mine',
-  'sunken-library': 'Sunken Library'
+  'sunken-library': 'Sunken Library',
+  'obsidian-pit': 'Obsidian Pit',
+  'ashen-cathedral': 'Ashen Cathedral',
+  'void-archives': 'Void Archives'
 };
 
 const explicitRarity: Partial<Record<string, Rarity>> = {
@@ -69,7 +72,20 @@ const explicitRarity: Partial<Record<string, Rarity>> = {
   'library-lost-sign': 'epic',
   'library-oracle-mask': 'epic',
   'library-last-refund': 'epic',
-  'library-prayer-exe': 'epic'
+  'library-prayer-exe': 'epic',
+  'obsidian-glass-hook': 'rare',
+  'obsidian-night-plate': 'rare',
+  'obsidian-pit-eye': 'rare',
+  'obsidian-black-core': 'epic',
+  'cathedral-cinder-saber': 'rare',
+  'cathedral-ember-mail': 'rare',
+  'cathedral-choir-thread': 'rare',
+  'cathedral-bell-zero': 'epic',
+  'archives-null-blade': 'rare',
+  'archives-erased-shell': 'rare',
+  'archives-index-loop': 'rare',
+  'archives-hollow-prayer': 'epic',
+  'archives-king-sign': 'epic'
 };
 
 function catalogRarity(entry: ItemCatalogEntry): Rarity {
@@ -86,7 +102,13 @@ export const materialInfo: Record<string, {
   pages: { label: 'Old Pages', rarity: 'normal', source: 'Common Area 1 material from Sunken Library.' },
   bark: { label: 'Living Bark', rarity: 'rare', source: 'Rare Area 1 material from gathering.' },
   crystal: { label: 'Fracture Crystal', rarity: 'rare', source: 'Rare Area 1 material from gathering.' },
-  ink: { label: 'Black Ink', rarity: 'epic', source: 'Epic Area 1 material from gathering.' }
+  ink: { label: 'Black Ink', rarity: 'epic', source: 'Epic Area 1 material from gathering.' },
+  obsidian: { label: 'Obsidian', rarity: 'normal', source: 'Common Area 2 material from Obsidian Pit.' },
+  ember: { label: 'Ember Dust', rarity: 'normal', source: 'Common Area 2 material from Ashen Cathedral.' },
+  script: { label: 'Burned Script', rarity: 'normal', source: 'Common Area 2 material from Void Archives.' },
+  ash: { label: 'Living Ash', rarity: 'rare', source: 'Rare Area 2 material from gathering.' },
+  cinder: { label: 'Cinder Glass', rarity: 'rare', source: 'Rare Area 2 material from gathering.' },
+  hollow: { label: 'Hollow Core', rarity: 'epic', source: 'Epic Area 2 material from gathering and deep mine floors.' }
 };
 
 export const itemCatalogByArea: Record<AreaId, ItemCatalogEntry[]> = {
@@ -155,19 +177,44 @@ export const itemCatalogByArea: Record<AreaId, ItemCatalogEntry[]> = {
     { id: 'library-oracle-mask', name: 'Oracle Mask', slot: 'relic', minLevel: 21, source: 'Sunken Library rare monsters.', text: 'Sees drops before they disappoint you.' },
     { id: 'library-last-refund', name: 'The Last Refund', slot: 'relic', minLevel: 23, source: 'Very rare Sunken Library discovery.', text: 'The Dealer hates this one.' },
     { id: 'library-prayer-exe', name: 'Prayer.exe', slot: 'relic', minLevel: 25, source: 'Very rare Sunken Library discovery.', text: 'Runs when everything else fails.' }
+  ],
+  'obsidian-pit': [
+    { id: 'obsidian-pit-knife', name: 'Pit Knife', slot: 'weapon', minLevel: 20, source: 'Area 2 / Obsidian Pit fights and Forge.', text: 'A black glass blade that remembers heat.' },
+    { id: 'obsidian-crack-spear', name: 'Crack Spear', slot: 'weapon', minLevel: 22, source: 'Area 2 / Obsidian Pit fights and Forge.', text: 'Long, brittle, and mean.' },
+    { id: 'obsidian-glass-hook', name: 'Glass Hook', slot: 'weapon', minLevel: 25, source: 'Obsidian Pit rare monsters and Forge.', text: 'Pulls enemies through sharp reflections.' },
+    { id: 'obsidian-pit-vest', name: 'Pit Vest', slot: 'armor', minLevel: 20, source: 'Area 2 / Obsidian Pit fights and Forge.', text: 'Warm armor from a cold hole.' },
+    { id: 'obsidian-night-plate', name: 'Night Plate', slot: 'armor', minLevel: 26, source: 'Obsidian Pit rare monsters.', text: 'Light disappears across its surface.' },
+    { id: 'obsidian-ash-loop', name: 'Ash Loop', slot: 'charm', minLevel: 21, source: 'Area 2 / Obsidian Pit fights and Forge.', text: 'Loops luck through smoke.' },
+    { id: 'obsidian-pit-eye', name: 'Pit Eye', slot: 'charm', minLevel: 25, source: 'Obsidian Pit rare monsters.', text: 'Sees the next floor before you do.' },
+    { id: 'obsidian-black-core', name: 'Black Core', slot: 'relic', minLevel: 28, source: 'Very rare Obsidian Pit discovery.', text: 'A heart-shaped mistake.' }
+  ],
+  'ashen-cathedral': [
+    { id: 'cathedral-ember-mace', name: 'Ember Mace', slot: 'weapon', minLevel: 27, source: 'Area 2 / Ashen Cathedral fights and Forge.', text: 'Heavy faith, hotter handle.' },
+    { id: 'cathedral-cinder-saber', name: 'Cinder Saber', slot: 'weapon', minLevel: 31, source: 'Ashen Cathedral rare monsters.', text: 'A clean cut that leaves ash.' },
+    { id: 'cathedral-ash-cloak', name: 'Ash Cloak', slot: 'armor', minLevel: 27, source: 'Area 2 / Ashen Cathedral fights and Forge.', text: 'Smoke curls away from impact.' },
+    { id: 'cathedral-ember-mail', name: 'Ember Mail', slot: 'armor', minLevel: 32, source: 'Ashen Cathedral rare monsters and Forge.', text: 'Glows when danger gets close.' },
+    { id: 'cathedral-prayer-coin', name: 'Prayer Coin', slot: 'charm', minLevel: 28, source: 'Area 2 / Ashen Cathedral fights and Forge.', text: 'A coin spent by nobody alive.' },
+    { id: 'cathedral-choir-thread', name: 'Choir Thread', slot: 'charm', minLevel: 33, source: 'Ashen Cathedral rare monsters.', text: 'Ties luck to a silent choir.' },
+    { id: 'cathedral-bell-zero', name: 'Bell Zero', slot: 'relic', minLevel: 35, source: 'Very rare Ashen Cathedral discovery.', text: 'It rings once when your build is wrong.' }
+  ],
+  'void-archives': [
+    { id: 'archives-ink-cleaver', name: 'Ink Cleaver', slot: 'weapon', minLevel: 34, source: 'Area 2 / Void Archives fights and Forge.', text: 'Cuts through written defenses.' },
+    { id: 'archives-null-blade', name: 'Null Blade', slot: 'weapon', minLevel: 38, source: 'Void Archives rare monsters.', text: 'Part of the blade is missing on purpose.' },
+    { id: 'archives-page-guard', name: 'Page Guard', slot: 'armor', minLevel: 34, source: 'Area 2 / Void Archives fights and Forge.', text: 'Every page blocks one bad ending.' },
+    { id: 'archives-erased-shell', name: 'Erased Shell', slot: 'armor', minLevel: 39, source: 'Void Archives rare monsters and Forge.', text: 'The weak point was removed from the sentence.' },
+    { id: 'archives-index-loop', name: 'Index Loop', slot: 'charm', minLevel: 36, source: 'Void Archives rare monsters.', text: 'Finds things you were not meant to farm.' },
+    { id: 'archives-hollow-prayer', name: 'Hollow Prayer', slot: 'relic', minLevel: 40, source: 'Very rare Void Archives discovery.', text: 'Pray, then check the combat log.' },
+    { id: 'archives-king-sign', name: 'King Sign', slot: 'relic', minLevel: 40, source: 'Very rare Void Archives discovery.', text: 'Points toward the second crown.' }
   ]
 };
 
-const areaMaterials: Record<AreaId, string> = {
-  'glyphroot-grove': 'wood',
-  'rust-mine': 'iron',
-  'sunken-library': 'pages'
-};
-
-const areaRareMaterials: Record<AreaId, string> = {
-  'glyphroot-grove': 'bark',
-  'rust-mine': 'crystal',
-  'sunken-library': 'crystal'
+const areaMaterials: Record<AreaId, { main: string; rare: string; epic: string }> = {
+  'glyphroot-grove': { main: 'wood', rare: 'bark', epic: 'ink' },
+  'rust-mine': { main: 'iron', rare: 'crystal', epic: 'ink' },
+  'sunken-library': { main: 'pages', rare: 'crystal', epic: 'ink' },
+  'obsidian-pit': { main: 'obsidian', rare: 'ash', epic: 'hollow' },
+  'ashen-cathedral': { main: 'ember', rare: 'cinder', epic: 'hollow' },
+  'void-archives': { main: 'script', rare: 'cinder', epic: 'hollow' }
 };
 
 export const starterWeapon = makeFixedItem({
@@ -261,20 +308,23 @@ function generateItem(area: AreaId, rarity: Rarity): Item {
 
 function costMaterialsFor(area: AreaId, rarity: Rarity, level: number): Partial<Record<string, number>> {
   const config = rarityConfig[rarity];
-  const main = areaMaterials[area];
-  const rare = areaRareMaterials[area];
-  const areaScale = area === 'glyphroot-grove' ? 0 : area === 'rust-mine' ? 1 : 2;
+  const pool = areaMaterials[area];
+  const areaScale = area.startsWith('obsidian') ? 3 : area.startsWith('ashen') ? 4 : area.startsWith('void') ? 5 : area === 'glyphroot-grove' ? 0 : area === 'rust-mine' ? 1 : 2;
   const mainCost = Math.max(1, Math.floor(config.materials + areaScale + level * 0.12));
 
   if (rarity === 'normal') {
-    return { [main]: mainCost };
+    return { [pool.main]: mainCost };
   }
 
   if (rarity === 'rare') {
-    return { [main]: mainCost, [rare]: 1 };
+    return { [pool.main]: mainCost, [pool.rare]: Math.max(1, Math.floor(config.materials * 0.6)) };
   }
 
-  return { [main]: mainCost, [rare]: 1, ink: 1 };
+  return {
+    [pool.main]: mainCost,
+    [pool.rare]: Math.max(1, Math.floor(config.materials * 0.75)),
+    [pool.epic]: Math.max(1, rarity === 'epic' ? 1 : Math.floor(config.materials * 0.5))
+  };
 }
 
 function makeFixedItem(input: {
@@ -321,7 +371,10 @@ function statsFor(slot: ItemSlot, power: number, rarity: Rarity) {
 function levelRangeFor(area: AreaId) {
   if (area === 'glyphroot-grove') return { min: 1, max: 8 };
   if (area === 'rust-mine') return { min: 7, max: 14 };
-  return { min: 13, max: 20 };
+  if (area === 'sunken-library') return { min: 13, max: 20 };
+  if (area === 'obsidian-pit') return { min: 20, max: 27 };
+  if (area === 'ashen-cathedral') return { min: 27, max: 34 };
+  return { min: 34, max: 40 };
 }
 
 function basePowerFor(slot: ItemSlot): number {

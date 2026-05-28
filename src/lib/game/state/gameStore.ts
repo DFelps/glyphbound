@@ -1,13 +1,16 @@
 import { writable } from 'svelte/store';
-import type { ActionId, AreaId, Enemy, GameState, Item, WorldNodeId } from '../types/game';
-import { areaOrder, nodes } from '../data/world';
+import type { ActionId, AreaId, Enemy, GameState, Item, ItemSlot, RegionId, WorldNodeId } from '../types/game';
+import { allAreaOrder, nodes, regionAreaOrder } from '../data/world';
+import { regionById, regionForArea } from '../data/regions';
 import { cloneEnemy, enemies, enemiesByArea } from '../data/enemies';
-import { cloneItem, generateLootItem, rollForgeStock } from '../data/items';
+import { cloneItem, rollForgeStock } from '../data/items';
 import { createPlayer } from '../systems/player';
 import { between, roll } from '../systems/random';
 import { startCombat } from '../systems/combat';
+import { enchantEquippedItem } from '../systems/enchantments';
+import { mineEnemyFor } from '../systems/mine';
 
-const baseSaveKey = 'glyphbound-save-v12-inventory-fix';
+const baseSaveKey = 'glyphbound-save-v13-region2';
 
 export const saveSlots = ['slot-1', 'slot-2', 'slot-3'] as const;
 
@@ -29,24 +32,48 @@ function now(): number {
   return Date.now();
 }
 
-function areaOneMaterials(existing: Partial<Record<string, number>> = {}) {
-  return {
-    wood: existing.wood ?? 0,
-    iron: existing.iron ?? 0,
-    pages: existing.pages ?? 0,
-    bark: existing.bark ?? 0,
-    crystal: existing.crystal ?? 0,
-    ink: existing.ink ?? 0
-  };
+function materialState(existing: Partial<Record<string, number>> = {}) {
+  const keys = [
+    'wood',
+    'iron',
+    'pages',
+    'bark',
+    'crystal',
+    'ink',
+    'obsidian',
+    'ember',
+    'script',
+    'ash',
+    'cinder',
+    'hollow'
+  ];
+
+  return Object.fromEntries(keys.map((key) => [key, existing[key] ?? 0])) as Record<string, number>;
+}
+
+function emptyAreaProgress(existing: Partial<Record<AreaId, { fights?: number; gathered?: number; cleared?: boolean }>> = {}) {
+  return Object.fromEntries(
+    allAreaOrder.map((area) => [
+      area,
+      {
+        fights: existing[area]?.fights ?? 0,
+        gathered: existing[area]?.gathered ?? 0,
+        cleared: existing[area]?.cleared ?? false
+      }
+    ])
+  ) as GameState['areaProgress'];
 }
 
 function initialState(): GameState {
   const createdAt = now();
   const player = createPlayer();
-  player.materials = areaOneMaterials(player.materials);
+
+  player.materials = materialState(player.materials);
 
   return {
-    version: 11,
+    version: 13,
+    currentRegion: 1,
+    unlockedSystems: [],
     location: 'village',
     player,
     combat: {
@@ -55,18 +82,20 @@ function initialState(): GameState {
       tick: 0,
       source: 'village'
     },
-    areaProgress: {
-      'glyphroot-grove': { fights: 0, gathered: 0, cleared: false },
-      'rust-mine': { fights: 0, gathered: 0, cleared: false },
-      'sunken-library': { fights: 0, gathered: 0, cleared: false }
-    },
+    areaProgress: emptyAreaProgress(),
     bossUnlocked: false,
     bossDefeated: false,
+    defeatedBosses: {},
     notice: null,
     forge: {
       stock: rollForgeStock('glyphroot-grove', 4),
       lastRefreshAt: createdAt,
       nextRefreshAt: createdAt + forgeRefreshMs
+    },
+    mine: {
+      floor: 1,
+      maxFloorReached: 1,
+      challengerUnlocked: false
     },
     wiki: {
       items: {},
@@ -96,15 +125,19 @@ function loadState(): GameState {
 
   try {
     const parsed = JSON.parse(raw) as Partial<GameState>;
+    const currentRegion = parsed.currentRegion ?? (parsed.bossDefeated ? 2 : 1);
 
     return normalizeState({
       ...fresh,
       ...parsed,
-      version: 11,
+      version: 13,
+      currentRegion,
+      unlockedSystems: parsed.unlockedSystems ?? (currentRegion >= 2 ? ['mine', 'enchantments'] : []),
+      location: parsed.location ?? (currentRegion === 2 ? 'ashen-refuge' : 'village'),
       player: {
         ...fresh.player,
         ...parsed.player,
-        materials: areaOneMaterials({
+        materials: materialState({
           ...fresh.player.materials,
           ...parsed.player?.materials
         }),
@@ -112,7 +145,7 @@ function loadState(): GameState {
           ...fresh.player.equipment,
           ...parsed.player?.equipment
         },
-        inventory: parsed.player?.inventory ?? fresh.player.inventory
+        inventory: parsed.player?.inventory?.length ? parsed.player.inventory : fresh.player.inventory
       },
       combat: {
         active: false,
@@ -120,24 +153,20 @@ function loadState(): GameState {
         tick: 0,
         source: 'village'
       },
-      areaProgress: {
-        'glyphroot-grove': {
-          ...fresh.areaProgress['glyphroot-grove'],
-          ...parsed.areaProgress?.['glyphroot-grove']
-        },
-        'rust-mine': {
-          ...fresh.areaProgress['rust-mine'],
-          ...parsed.areaProgress?.['rust-mine']
-        },
-        'sunken-library': {
-          ...fresh.areaProgress['sunken-library'],
-          ...parsed.areaProgress?.['sunken-library']
-        }
+      areaProgress: emptyAreaProgress(parsed.areaProgress),
+      defeatedBosses: {
+        ...fresh.defeatedBosses,
+        ...parsed.defeatedBosses,
+        ...(parsed.bossDefeated ? { watcher: true } : {})
       },
       forge: {
         ...fresh.forge,
         ...parsed.forge,
         stock: parsed.forge?.stock?.length ? parsed.forge.stock : fresh.forge.stock
+      },
+      mine: {
+        ...fresh.mine,
+        ...parsed.mine
       },
       wiki: {
         items: {
@@ -162,8 +191,6 @@ function loadState(): GameState {
 }
 
 function normalizeState(state: GameState): GameState {
-  restoreEquippedItemsToInventory(state);
-
   for (const item of state.player.inventory) {
     discoverItem(state, item);
   }
@@ -171,24 +198,16 @@ function normalizeState(state: GameState): GameState {
   for (const item of Object.values(state.player.equipment)) {
     if (item) {
       discoverItem(state, item);
+
+      if (!state.player.inventory.some((entry) => entry.id === item.id)) {
+        state.player.inventory.push(item);
+      }
     }
   }
 
+  updateBossUnlock(state);
   refreshForgeIfNeeded(state);
   return state;
-}
-
-function restoreEquippedItemsToInventory(state: GameState): void {
-  const inventoryIds = new Set(state.player.inventory.map((item) => item.id));
-
-  for (const item of Object.values(state.player.equipment)) {
-    if (!item || inventoryIds.has(item.id)) {
-      continue;
-    }
-
-    state.player.inventory.unshift(item);
-    inventoryIds.add(item.id);
-  }
 }
 
 function saveState(state: GameState): void {
@@ -212,15 +231,14 @@ function cloneState(state: GameState): GameState {
       ...state.combat,
       enemy: state.combat.enemy ? { ...state.combat.enemy } : null
     },
-    areaProgress: {
-      'glyphroot-grove': { ...state.areaProgress['glyphroot-grove'] },
-      'rust-mine': { ...state.areaProgress['rust-mine'] },
-      'sunken-library': { ...state.areaProgress['sunken-library'] }
-    },
+    areaProgress: emptyAreaProgress(state.areaProgress),
+    defeatedBosses: { ...state.defeatedBosses },
+    unlockedSystems: [...state.unlockedSystems],
     forge: {
       ...state.forge,
       stock: [...state.forge.stock]
     },
+    mine: { ...state.mine },
     wiki: {
       items: { ...state.wiki.items },
       enemies: { ...state.wiki.enemies },
@@ -256,16 +274,15 @@ function addMaterial(state: GameState, key: string, amount: number): void {
   state.player.materials[key] = (state.player.materials[key] ?? 0) + amount;
 }
 
+function currentRegionAreas(state: GameState): AreaId[] {
+  return regionAreaOrder[state.currentRegion];
+}
+
 function highestForgeArea(state: GameState): AreaId {
-  if (state.areaProgress['sunken-library'].cleared) {
-    return 'sunken-library';
-  }
+  const areas = currentRegionAreas(state);
+  const cleared = areas.filter((area) => state.areaProgress[area].cleared);
 
-  if (state.areaProgress['rust-mine'].cleared) {
-    return 'rust-mine';
-  }
-
-  return 'glyphroot-grove';
+  return cleared.at(-1) ?? areas[0];
 }
 
 function randomEnemyFor(location: WorldNodeId): Enemy {
@@ -276,8 +293,9 @@ function randomEnemyFor(location: WorldNodeId): Enemy {
   const ids = enemiesByArea[location];
   const rare = ids.filter((id) => cloneEnemy(id as keyof typeof enemies).rare);
   const common = ids.filter((id) => !cloneEnemy(id as keyof typeof enemies).rare);
+  const rareChance = regionForArea(location) === 1 ? 0.025 : 0.035;
 
-  if (rare.length && roll(location === 'glyphroot-grove' ? 0.025 : 0.018)) {
+  if (rare.length && roll(rareChance)) {
     return cloneEnemy(rare[between(0, rare.length - 1)] as keyof typeof enemies);
   }
 
@@ -285,36 +303,42 @@ function randomEnemyFor(location: WorldNodeId): Enemy {
 }
 
 function gatherFor(state: GameState, location: AreaId): void {
-  const guaranteed: Record<AreaId, string> = {
+  const common: Record<AreaId, string> = {
     'glyphroot-grove': 'wood',
     'rust-mine': 'iron',
-    'sunken-library': 'pages'
+    'sunken-library': 'pages',
+    'obsidian-pit': 'obsidian',
+    'ashen-cathedral': 'ember',
+    'void-archives': 'script'
   };
 
-  const names: Record<string, string> = {
-    wood: 'Wood',
-    iron: 'Iron',
-    pages: 'Old Pages',
-    bark: 'Living Bark',
-    crystal: 'Fracture Crystal',
-    ink: 'Black Ink'
+  const rare: Record<RegionId, string[]> = {
+    1: ['bark', 'crystal'],
+    2: ['ash', 'cinder']
+  };
+
+  const epic: Record<RegionId, string> = {
+    1: 'ink',
+    2: 'hollow'
   };
 
   const found: string[] = [];
-  const common = guaranteed[location];
+  const region = regionForArea(location);
+  const base = common[location];
 
-  addMaterial(state, common, 1);
-  found.push(`1 ${names[common]}`);
+  addMaterial(state, base, 1);
+  found.push(`1 ${base}`);
 
-  if (roll(0.12)) {
-    const rare = roll(0.5) ? 'bark' : 'crystal';
-    addMaterial(state, rare, 1);
-    found.push(`1 ${names[rare]}`);
+  if (roll(region === 1 ? 0.12 : 0.14)) {
+    const key = rare[region][between(0, rare[region].length - 1)];
+    addMaterial(state, key, 1);
+    found.push(`1 ${key}`);
   }
 
-  if (roll(0.025)) {
-    addMaterial(state, 'ink', 1);
-    found.push(`1 ${names.ink}`);
+  if (roll(region === 1 ? 0.025 : 0.035)) {
+    const key = epic[region];
+    addMaterial(state, key, 1);
+    found.push(`1 ${key}`);
   }
 
   state.log.unshift(`[material] Gathered ${found.join(', ')}.`);
@@ -326,13 +350,11 @@ function gatherFor(state: GameState, location: AreaId): void {
 }
 
 function areaForItem(item: Item): AreaId {
-  if (item.catalogId.startsWith('mine-')) {
-    return 'rust-mine';
-  }
-
-  if (item.catalogId.startsWith('library-')) {
-    return 'sunken-library';
-  }
+  if (item.catalogId.startsWith('mine-')) return 'rust-mine';
+  if (item.catalogId.startsWith('library-')) return 'sunken-library';
+  if (item.catalogId.startsWith('obsidian-')) return 'obsidian-pit';
+  if (item.catalogId.startsWith('cathedral-')) return 'ashen-cathedral';
+  if (item.catalogId.startsWith('archives-')) return 'void-archives';
 
   return 'glyphroot-grove';
 }
@@ -340,7 +362,10 @@ function areaForItem(item: Item): AreaId {
 function forgeLevelRange(area: AreaId): { min: number; max: number } {
   if (area === 'glyphroot-grove') return { min: 1, max: 8 };
   if (area === 'rust-mine') return { min: 7, max: 14 };
-  return { min: 13, max: 20 };
+  if (area === 'sunken-library') return { min: 13, max: 20 };
+  if (area === 'obsidian-pit') return { min: 20, max: 27 };
+  if (area === 'ashen-cathedral') return { min: 27, max: 34 };
+  return { min: 34, max: 40 };
 }
 
 function stockMatchesArea(state: GameState, area: AreaId): boolean {
@@ -427,6 +452,108 @@ function discoverEnemy(state: GameState, enemy: Enemy): void {
   }
 }
 
+function goHome(state: GameState): void {
+  state.location = regionById[state.currentRegion].villageNodeId as WorldNodeId;
+}
+
+function unlockRegionTwo(state: GameState): void {
+  state.currentRegion = 2;
+  state.unlockedSystems = ['mine', 'enchantments'];
+  state.bossUnlocked = false;
+  state.bossDefeated = false;
+  state.location = 'ashen-refuge';
+  state.player.hp = state.player.maxHp;
+  state.forge.nextRefreshAt = 0;
+  refreshForgeIfNeeded(state);
+
+  state.notice = {
+    title: 'Ashen Depths',
+    message: 'The Watcher fell. The Ashen Refuge, Deep Mine and Glyph Anvil are now available.',
+    kind: 'victory'
+  };
+
+  state.log.unshift('Region 2 unlocked: Ashen Depths.');
+  state.log.unshift('New systems unlocked: 1500 Floor Mine and Enchantments.');
+}
+
+
+function applyCheatMode(state: GameState): void {
+  state.currentRegion = 2;
+  state.unlockedSystems = ['mine', 'enchantments'];
+  state.location = 'ashen-refuge';
+  state.bossUnlocked = true;
+  state.bossDefeated = false;
+  state.defeatedBosses.watcher = true;
+
+  state.player.level = 40;
+  state.player.xp = 0;
+  state.player.nextLevel = 999999;
+  state.player.maxHp = 999;
+  state.player.hp = 999;
+  state.player.gold = 999999;
+
+  for (const key of Object.keys(state.player.materials)) {
+    state.player.materials[key] = 999;
+  }
+
+  for (const area of allAreaOrder) {
+    state.areaProgress[area].fights = 3;
+    state.areaProgress[area].gathered = Math.max(state.areaProgress[area].gathered, 3);
+    state.areaProgress[area].cleared = true;
+  }
+
+  const weapon = state.player.equipment.weapon;
+  const armor = state.player.equipment.armor;
+  const charm = state.player.equipment.charm;
+  const relic = state.player.equipment.relic;
+
+  if (weapon) {
+    weapon.level = Math.min(40, Math.max(weapon.level, 20));
+    weapon.power = Math.max(weapon.power, 999);
+    weapon.stats.attack = 999;
+  }
+
+  if (armor) {
+    armor.level = Math.min(40, Math.max(armor.level, 20));
+    armor.power = Math.max(armor.power, 999);
+    armor.stats.defense = 999;
+  }
+
+  if (charm) {
+    charm.stats.luck = 999;
+  }
+
+  if (relic) {
+    relic.stats.attack = Math.max(relic.stats.attack, 250);
+    relic.stats.defense = Math.max(relic.stats.defense, 250);
+    relic.stats.luck = Math.max(relic.stats.luck, 250);
+  }
+
+  state.mine.floor = 1;
+  state.mine.maxFloorReached = Math.max(state.mine.maxFloorReached, 1000);
+  state.mine.challengerUnlocked = true;
+  state.forge.nextRefreshAt = 0;
+  refreshForgeIfNeeded(state);
+
+  state.notice = {
+    title: 'Cheat Mode',
+    message: 'Dev power applied: Region 2, 999 HP, massive gear, gold and materials.',
+    kind: 'info'
+  };
+
+  state.log.unshift('[dev] Cheat mode applied. Region 2, mine and enchantments are unlocked.');
+}
+
+function updateBossUnlock(state: GameState): void {
+  const areas = currentRegionAreas(state);
+  const cleared = areas.every((id) => state.areaProgress[id].cleared);
+
+  if (cleared && !state.bossUnlocked) {
+    state.bossUnlocked = true;
+    state.log.unshift(`${regionById[state.currentRegion].boss} is available.`);
+  }
+}
+
 function doAction(state: GameState, action: ActionId): void {
   refreshForgeIfNeeded(state);
 
@@ -450,7 +577,7 @@ function doAction(state: GameState, action: ActionId): void {
 
   if (action === 'rest') {
     state.player.hp = state.player.maxHp;
-    state.log.unshift('Rested at the inn. HP restored.');
+    state.log.unshift('Rested. HP restored.');
     return;
   }
 
@@ -472,6 +599,24 @@ function doAction(state: GameState, action: ActionId): void {
     return;
   }
 
+  if (action === 'go-obsidian') {
+    state.location = 'obsidian-pit';
+    state.log.unshift('Entered Obsidian Pit.');
+    return;
+  }
+
+  if (action === 'go-cathedral') {
+    state.location = 'ashen-cathedral';
+    state.log.unshift('Entered Ashen Cathedral.');
+    return;
+  }
+
+  if (action === 'go-archives') {
+    state.location = 'void-archives';
+    state.log.unshift('Entered Void Archives.');
+    return;
+  }
+
   if (action === 'go-forge') {
     state.location = 'old-forge';
     refreshForgeIfNeeded(state);
@@ -479,8 +624,30 @@ function doAction(state: GameState, action: ActionId): void {
     return;
   }
 
+  if (action === 'go-deep-mine') {
+    if (!state.unlockedSystems.includes('mine')) {
+      state.log.unshift('The Deep Mine unlocks after The Watcher.');
+      return;
+    }
+
+    state.location = 'deep-mine';
+    state.log.unshift(`Entered the 1500 Floor Mine at floor ${state.mine.floor}.`);
+    return;
+  }
+
+  if (action === 'go-enchanter') {
+    if (!state.unlockedSystems.includes('enchantments')) {
+      state.log.unshift('Enchantments unlock after The Watcher.');
+      return;
+    }
+
+    state.location = 'glyph-anvil';
+    state.log.unshift('Opened The Glyph Anvil.');
+    return;
+  }
+
   if (action === 'go-boss') {
-    if (!state.bossUnlocked) {
+    if (!state.bossUnlocked || state.currentRegion !== 1) {
       state.log.unshift('The Watcher Gate is locked. Clear the 3 areas first.');
       return;
     }
@@ -490,9 +657,20 @@ function doAction(state: GameState, action: ActionId): void {
     return;
   }
 
-  if (action === 'back-village') {
-    state.location = 'village';
-    state.log.unshift('Returned to Glyphbound Village.');
+  if (action === 'go-hollow-boss') {
+    if (!state.bossUnlocked || state.currentRegion !== 2) {
+      state.log.unshift('The Hollow Gate is locked. Clear the 3 Ashen areas first.');
+      return;
+    }
+
+    state.location = 'hollow-gate';
+    state.log.unshift('The Hollow King waits.');
+    return;
+  }
+
+  if (action === 'back-village' || action === 'leave-mine') {
+    goHome(state);
+    state.log.unshift(`Returned to ${nodes[state.location].shortName}.`);
     return;
   }
 
@@ -509,24 +687,52 @@ function doAction(state: GameState, action: ActionId): void {
   }
 
   if (action === 'challenge-boss') {
-    if (!state.bossUnlocked) {
+    if (!state.bossUnlocked || state.currentRegion !== 1) {
       state.log.unshift('The gate is still locked.');
-      return;
-    }
-
-    if (state.bossDefeated) {
-      state.log.unshift('The Watcher is already defeated.');
       return;
     }
 
     const enemy = cloneEnemy('watcher');
     discoverEnemy(state, enemy);
     startCombat(state, enemy, 'watcher-gate');
+    return;
   }
+
+  if (action === 'challenge-hollow-king') {
+    if (!state.bossUnlocked || state.currentRegion !== 2) {
+      state.log.unshift('The Hollow Gate is still locked.');
+      return;
+    }
+
+    const enemy = cloneEnemy('hollowKing');
+    discoverEnemy(state, enemy);
+    startCombat(state, enemy, 'hollow-gate');
+    return;
+  }
+
+  if (action === 'mine-floor') {
+    const enemy = mineEnemyFor(state);
+    startCombat(state, enemy, 'deep-mine');
+    return;
+  }
+
+  if (action === 'enchant-weapon') enchantEquipped(state, 'weapon');
+  if (action === 'enchant-armor') enchantEquipped(state, 'armor');
+  if (action === 'enchant-charm') enchantEquipped(state, 'charm');
+  if (action === 'enchant-relic') enchantEquipped(state, 'relic');
+}
+
+function enchantEquipped(state: GameState, slot: ItemSlot): void {
+  if (!state.unlockedSystems.includes('enchantments')) {
+    state.log.unshift('Enchantments are locked.');
+    return;
+  }
+
+  enchantEquippedItem(state, slot);
 }
 
 function isAreaId(value: WorldNodeId): value is AreaId {
-  return areaOrder.includes(value as AreaId);
+  return allAreaOrder.includes(value as AreaId);
 }
 
 function createGameStore() {
@@ -534,9 +740,10 @@ function createGameStore() {
   let ready = false;
 
   function update(fn: (state: GameState) => void) {
-    store.update((state) => {
+    store.update((state: GameState) => {
       refreshForgeIfNeeded(state);
       fn(state);
+      updateBossUnlock(state);
       const next = cloneState(state);
 
       if (ready) {
@@ -549,7 +756,7 @@ function createGameStore() {
 
   return {
     subscribe: store.subscribe,
-   boot(slot: SaveSlot = 'slot-1') {
+    boot(slot: SaveSlot = 'slot-1') {
       setActiveSaveSlot(slot);
       store.set(loadState());
       ready = true;
@@ -581,6 +788,9 @@ function createGameStore() {
         state.notice = null;
       });
     },
+    unlockRegionTwo() {
+      update((state) => unlockRegionTwo(state));
+    },
     equip(item: Item) {
       update((state) => {
         if (!item.slot) {
@@ -603,6 +813,9 @@ function createGameStore() {
         state.log.unshift(`Equipped ${item.name}.`);
       });
     },
+    cheatMode() {
+      update((state) => applyCheatMode(state));
+    },
     reset() {
       const fresh = initialState();
 
@@ -621,3 +834,7 @@ function createGameStore() {
 }
 
 export const game = createGameStore();
+
+export function completeWatcherTransition(state: GameState): void {
+  unlockRegionTwo(state);
+}

@@ -2,6 +2,10 @@ export type ItemSlot = 'weapon' | 'armor' | 'charm' | 'relic';
 
 export type Rarity = 'normal' | 'rare' | 'epic' | 'legendary' | 'unique';
 
+export type RegionId = 1 | 2;
+
+export type SystemId = 'mine' | 'enchantments';
+
 export type ItemStats = {
   attack: number;
   defense: number;
@@ -28,6 +32,7 @@ export type Item = {
   art: string;
   cost: ItemCost;
   catalogId: string;
+  enchantLevel?: number;
   expiresAt?: number;
 };
 
@@ -47,9 +52,28 @@ export type Enemy = {
   area?: AreaId;
 };
 
-export type WorldNodeId = 'village' | 'glyphroot-grove' | 'rust-mine' | 'sunken-library' | 'old-forge' | 'watcher-gate';
+export type AreaId =
+  | 'glyphroot-grove'
+  | 'rust-mine'
+  | 'sunken-library'
+  | 'obsidian-pit'
+  | 'ashen-cathedral'
+  | 'void-archives';
 
-export type AreaId = 'glyphroot-grove' | 'rust-mine' | 'sunken-library';
+export type WorldNodeId =
+  | 'village'
+  | 'ashen-refuge'
+  | 'glyphroot-grove'
+  | 'rust-mine'
+  | 'sunken-library'
+  | 'obsidian-pit'
+  | 'ashen-cathedral'
+  | 'void-archives'
+  | 'old-forge'
+  | 'watcher-gate'
+  | 'hollow-gate'
+  | 'deep-mine'
+  | 'glyph-anvil';
 
 export type NodeKind = 'town' | 'wilds' | 'forge' | 'boss';
 
@@ -58,12 +82,25 @@ export type ActionId =
   | 'go-grove'
   | 'go-mine'
   | 'go-library'
+  | 'go-obsidian'
+  | 'go-cathedral'
+  | 'go-archives'
   | 'go-forge'
   | 'go-boss'
+  | 'go-hollow-boss'
+  | 'go-deep-mine'
+  | 'go-enchanter'
   | 'back-village'
   | 'fight'
   | 'gather'
-  | 'challenge-boss';
+  | 'challenge-boss'
+  | 'challenge-hollow-king'
+  | 'mine-floor'
+  | 'leave-mine'
+  | 'enchant-weapon'
+  | 'enchant-armor'
+  | 'enchant-charm'
+  | 'enchant-relic';
 
 export type NodeAction = {
   id: ActionId;
@@ -84,6 +121,7 @@ export type WorldNode = {
   maxLevel: number;
   art: string;
   description: string;
+  regionId?: RegionId;
   actions: NodeAction[];
 };
 
@@ -118,6 +156,12 @@ export type ForgeState = {
   nextRefreshAt: number;
 };
 
+export type MineState = {
+  floor: number;
+  maxFloorReached: number;
+  challengerUnlocked: boolean;
+};
+
 export type Player = {
   name: string;
   glyph: '@';
@@ -134,14 +178,18 @@ export type Player = {
 
 export type GameState = {
   version: number;
+  currentRegion: RegionId;
+  unlockedSystems: SystemId[];
   location: WorldNodeId;
   player: Player;
   combat: CombatState;
   areaProgress: Record<AreaId, AreaProgress>;
   bossUnlocked: boolean;
   bossDefeated: boolean;
+  defeatedBosses: Record<string, boolean>;
   notice: GameNotice | null;
   forge: ForgeState;
+  mine: MineState;
   wiki: WikiState;
   log: string[];
 };

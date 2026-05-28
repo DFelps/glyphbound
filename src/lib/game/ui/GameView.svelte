@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { game, saveKeyForSlot, saveSlots, type SaveSlot } from '../state/gameStore';
   import { nodes, areaOrder } from '../data/world';
-  import { itemCatalogByArea, itemStatSummary, materialInfo, type ItemCatalogEntry } from '../data/items';
+  import { itemCatalogByArea, materialInfo } from '../data/items';
   import { enemies, enemiesByArea } from '../data/enemies';
   import { combatStep } from '../systems/combat';
   import { attackPower, defensePower, luckPower } from '../systems/player';
@@ -31,9 +31,26 @@
 
   const tutorialSeenKey = 'glyphbound-tutorial-v1';
   const equipmentSlots: ItemSlot[] = ['weapon', 'armor', 'charm', 'relic'];
-  const materialGroups = [
-    { title: 'AREA 1', keys: ['wood', 'iron', 'pages', 'bark', 'crystal', 'ink'] }
+
+  type MaterialGroup = {
+    title: string;
+    minRegion: number;
+    keys: string[];
+  };
+
+  const materialGroups: MaterialGroup[] = [
+    {
+      title: 'THE BROKEN FRONTIER',
+      minRegion: 1,
+      keys: ['wood', 'iron', 'pages', 'bark', 'crystal', 'ink']
+    },
+    {
+      title: 'ASHEN DEPTHS',
+      minRegion: 2,
+      keys: ['obsidian', 'ember', 'script', 'ash', 'glass', 'core']
+    }
   ];
+
 
   const tutorialSteps = [
   {
@@ -61,6 +78,7 @@
     onMount(() => {
       refreshSaveSlots();
       game.boot(selectedSlot);
+      window.addEventListener('keydown', handleDevCheat);
 
       menuOpen = true;
 
@@ -70,6 +88,8 @@
     }, 1000);
 
     return () => {
+      window.removeEventListener('keydown', handleDevCheat);
+
       if (combatTimer) {
         clearInterval(combatTimer);
       }
@@ -93,12 +113,24 @@
     }
   });
 
+  $effect(() => {
+    if (!$game.notice) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      game.clearNotice();
+    }, 2600);
+
+    return () => clearTimeout(timer);
+  });
+
   const currentNode = $derived(nodes[$game.location]);
   const enemyPercent = $derived(
     $game.combat.enemy ? Math.max(0, Math.min(100, ($game.combat.enemy.hp / $game.combat.enemy.maxHp) * 100)) : 0
   );
   const forgeCountdown = $derived(Math.max(0, Math.ceil(($game.forge.nextRefreshAt - nowTime) / 1000)));
-  const currentPreview = $derived(inventoryOpen ? selectedItem : viewedForgeItem);
+  const currentPreview = $derived(viewedForgeItem ?? selectedItem);
   const totalWikiItems = $derived(areaOrder.reduce((total, areaId) => total + itemCatalogByArea[areaId].length, 0));
   const totalWikiEnemies = $derived(areaOrder.reduce((total, areaId) => total + enemiesByArea[areaId].length, 1));
   const wikiItemCount = $derived(Object.keys($game.wiki.items).length);
@@ -196,6 +228,21 @@
     localStorage.setItem(tutorialSeenKey, '1');
   }
 
+  function handleDevCheat(event: KeyboardEvent) {
+    if (!event.ctrlKey || !event.shiftKey || event.key.toLowerCase() !== 'g') {
+      return;
+    }
+
+    const allowed = import.meta.env.DEV || localStorage.getItem('glyphbound-cheats') === '1';
+
+    if (!allowed) {
+      return;
+    }
+
+    event.preventDefault();
+    game.cheatMode();
+  }
+
   function gatherWithDelay() {
     if (gathering || $game.combat.active) {
       return;
@@ -206,7 +253,7 @@
     setTimeout(() => {
       game.act('gather');
       gathering = false;
-    }, 1000);
+    }, 1800);
   }
 
   function startNewGame() {
@@ -283,10 +330,18 @@
     return materialInfo[key]?.label ?? key;
   }
 
-  function knownItemName(id: string) {
-    const items = Object.values(itemCatalogByArea).flat() as ItemCatalogEntry[];
-    const item = items.find((entry) => entry.id === id);
+  function hasAnyMaterial(keys: string[]) {
+    return keys.some((key) => ($game.player.materials[key] ?? 0) > 0);
+  }
 
+  function visibleMaterialGroups() {
+    const currentRegion = ($game as unknown as { currentRegion?: number }).currentRegion ?? 1;
+
+    return materialGroups.filter((group) => group.minRegion <= currentRegion || hasAnyMaterial(group.keys));
+  }
+
+  function knownItemName(id: string) {
+    const item = Object.values(itemCatalogByArea).flat().find((entry) => entry.id === id);
     return item?.name ?? id;
   }
 
@@ -324,25 +379,12 @@
   }
 
   function costText(item: Item) {
-    const materials = Object.entries(item.cost.materials as Partial<Record<string, number>>)
+    const materials = Object.entries(item.cost.materials)
       .filter(([, value]) => (value ?? 0) > 0)
-      .map(([key, value]) => `${value} ${materialName(key)}`);
+      .map(([key, value]) => `${value} ${key}`);
 
     return [`${item.cost.gold}g`, ...materials].join(' / ');
   }
-
-  function slotLabel(slot: ItemSlot | null | undefined) {
-    if (slot === 'weapon') return 'WPN';
-    if (slot === 'armor') return 'ARM';
-    if (slot === 'charm') return 'CHM';
-    if (slot === 'relic') return 'REL';
-    return '---';
-  }
-
-  function shortStatSummary(item: Item) {
-    return itemStatSummary(item) || 'no stats';
-  }
-
 
   function canBuy(item: Item) {
     if ($game.player.gold < item.cost.gold) {
@@ -480,7 +522,7 @@
     <div class="material-panel">
       <div class="panel-label">Materials</div>
 
-      {#each materialGroups as group}
+      {#each visibleMaterialGroups() as group}
         <div class="material-group">
           <strong>{group.title}</strong>
 
@@ -497,7 +539,7 @@
 
     <nav class="ascii-menu" class:tutorial-focus={tutorialOpen && tutorialSteps[tutorialStep].target === '.ascii-menu'} aria-label="main menu">
       <button type="button" onclick={() => game.act('back-village')}>+--------------------+<br />|      VILLAGE       |<br />+--------------------+</button>
-      <button type="button" onclick={() => { viewedForgeItem = null; inventoryOpen = true; }}>+--------------------+<br />| INVENTORY / EQUIP  |<br />+--------------------+</button>
+      <button type="button" onclick={() => inventoryOpen = true}>+--------------------+<br />| INVENTORY / EQUIP  |<br />+--------------------+</button>
       <button type="button" onclick={() => wikiOpen = true}>+--------------------+<br />|        WIKI        |<br />+--------------------+</button>
       <button type="button" class="danger-menu" onclick={() => optionsOpen = true}>+--------------------+<br />|      OPTIONS       |<br />+--------------------+</button>
     </nav>
@@ -509,7 +551,7 @@
       <div class="stage-title">{currentNode.name}</div>
     </div>
 
-    <div class="place-view" class:forge-view={currentNode.kind === 'forge'}>
+    <div class="place-view">
       <pre class={`place-art art-${currentNode.kind}`}>{currentNode.art}</pre>
 
       <div class="place-copy">
@@ -559,6 +601,23 @@
           {/if}
         </div>
 
+        {#if currentNode.kind === 'forge'}
+          <div class="forge-stock">
+            <div class="forge-head">
+              <strong>Rotating Stock (4 items)</strong>
+              <span>refresh {timeLabel(forgeCountdown)}</span>
+            </div>
+
+            {#each $game.forge.stock as item}
+              <button type="button" class={`forge-item ${rarityClass(item.rarity)}`} onmouseenter={() => previewForgeItem(item)} onclick={() => game.buyForgeItem(item.id)} disabled={!canBuy(item)}>
+                <span>{item.art}</span>
+                <strong>{item.name}</strong>
+                <em>lvl {item.level} / {item.rarity}</em>
+                <small>{costText(item)}</small>
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
 
       <div class="place-actions" class:tutorial-focus={tutorialOpen && tutorialSteps[tutorialStep].target === '.place-actions'}>
@@ -573,61 +632,21 @@
           </button>
         {/each}
       </div>
-
-
-      {#if currentNode.kind === 'forge'}
-        <div class="forge-stock forge-stock-wide">
-          <div class="forge-head">
-            <strong>Rotating Stock (4 items)</strong>
-            <span>refresh {timeLabel(forgeCountdown)}</span>
-          </div>
-
-          <div class="forge-grid">
-            {#each $game.forge.stock as item}
-              <button type="button" class={`forge-item ${rarityClass(item.rarity)}`} onmouseenter={() => previewForgeItem(item)} onclick={() => game.buyForgeItem(item.id)} disabled={!canBuy(item)}>
-                <span class="item-tag">[ {slotLabel(item.slot)} ]</span>
-                <div class="forge-item-main">
-                  <div class="forge-item-title">
-                    <strong>{item.name}</strong>
-                    <em>lvl {item.level} / {item.rarity}</em>
-                  </div>
-                  <small class="forge-stats">{shortStatSummary(item)}</small>
-                  <small class="forge-text">{item.text}</small>
-                  <small class="forge-source">{item.source}</small>
-                  <small class="forge-cost">{costText(item)}</small>
-                </div>
-              </button>
-            {/each}
-          </div>
-        </div>
-      {/if}
     </div>
 
     {#if $game.combat.active && $game.combat.enemy}
       <div class="combat-overlay">
-        <div class="combat-card" class:rare-enemy={$game.combat.enemy.rare}>
-          <pre class="combat-frame">+------------------------------------------+
+        <pre class="combat-card" class:rare-enemy={$game.combat.enemy.rare}>+------------------------------------------+
 |             ASSISTED COMBAT              |
++------------------------------------------+
+{$game.combat.enemy.art}
+
+ enemy: {$game.combat.enemy.name}
+ hp: {hpBar($game.combat.enemy.hp, $game.combat.enemy.maxHp, 22)} {$game.combat.enemy.hp}/{$game.combat.enemy.maxHp}
+ you: {hpBar($game.player.hp, $game.player.maxHp, 22)} {$game.player.hp}/{$game.player.maxHp}
+
+ controls locked. watching battle...
 +------------------------------------------+</pre>
-          <pre class="combat-art">{$game.combat.enemy.art}</pre>
-
-          <div class="combat-name">enemy: {$game.combat.enemy.name}</div>
-
-          <div class="combat-hp enemy-hp">
-            <span>ENEMY HP</span>
-            <pre>{hpBar($game.combat.enemy.hp, $game.combat.enemy.maxHp, 22)}</pre>
-            <strong>{$game.combat.enemy.hp}/{$game.combat.enemy.maxHp}</strong>
-          </div>
-
-          <div class="combat-hp player-hp">
-            <span>YOUR HP</span>
-            <pre>{hpBar($game.player.hp, $game.player.maxHp, 22)}</pre>
-            <strong>{$game.player.hp}/{$game.player.maxHp}</strong>
-          </div>
-
-          <div class="combat-lock">controls locked. watching battle...</div>
-          <pre class="combat-frame">+------------------------------------------+</pre>
-        </div>
         <div class="combat-fill" style={`width: ${enemyPercent}%`}></div>
       </div>
     {/if}
@@ -646,8 +665,9 @@
       {#each equipmentSlots as slot}
         {@const item = $game.player.equipment[slot]}
         <div class={`equipment-row ${item ? rarityClass(item.rarity) : ''}`}>
-          <span>[ {slotLabel(slot)} ]</span>
-          <em>{item ? item.name : '-'}</em>
+          <span>{slot === 'weapon' ? '⚔' : slot === 'armor' ? '🛡' : slot === 'charm' ? '◇' : '✕'}</span>
+          <strong>{slot}</strong>
+          <em>{item ? `${item.glyph} ${item.name}` : '-'}</em>
         </div>
       {/each}
     </div>
@@ -669,12 +689,9 @@
   </aside>
 
   {#if $game.notice}
-    <div class="modal-backdrop notice-backdrop" role="presentation" onclick={() => game.clearNotice()} onkeydown={(event) => event.key === 'Escape' && game.clearNotice()}>
-      <section class={`notice-modal ${$game.notice.kind}`} role="dialog" aria-modal="true" tabindex="-1" onclick={(event) => event.stopPropagation()} onkeydown={(event) => event.stopPropagation()}>
-        <strong>{$game.notice.title}</strong>
-        <span>{$game.notice.message}</span>
-        <button type="button" class="modal-button notice-button" onclick={() => game.clearNotice()}>[ OK ]</button>
-      </section>
+    <div class={`result-notice ${$game.notice.kind}`}>
+      <strong>{$game.notice.title}</strong>
+      <span>{$game.notice.message}</span>
     </div>
   {/if}
 
@@ -689,7 +706,7 @@
           <div class="bag-grid">
             {#each $game.player.inventory as item}
               <button type="button" class={`bag-slot ${rarityClass(item.rarity)}`} class:selected={selectedItem?.id === item.id} onclick={() => selectItem(item)} title={`${item.name} - ${item.source}`}>
-                <span>[ {slotLabel(item.slot)} ]</span>
+                <span>{item.art}</span>
                 <small>{item.name}</small>
               </button>
             {/each}
@@ -709,7 +726,7 @@
               {@const luckNext = itemStat(currentPreview, 'luck')}
 
               <div class={`item-detail ${rarityClass(currentPreview.rarity)}`}>
-                <pre>[ {slotLabel(currentPreview.slot)} ]</pre>
+                <pre>{currentPreview.art}</pre>
                 <h3>{currentPreview.name}</h3>
                 <p>{currentPreview.text}</p>
 
@@ -749,7 +766,7 @@
 | choose an item               |
 +------------------------------+
 | click inventory items        |
-| equip or compare gear        |
+| hover forge stock            |
 | green = better               |
 | red = worse                  |
 +------------------------------+</pre>
@@ -873,86 +890,3 @@
 
 </main>
 {/if}
-
-<style>
-  .material-group {
-    border-top: 1px dashed rgba(255, 255, 255, 0.18);
-    padding-top: 0.45rem;
-    margin-top: 0.45rem;
-  }
-
-  .material-group > strong {
-    display: block;
-    margin-bottom: 0.25rem;
-    color: #888;
-    font-size: 0.72rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .combat-card {
-    display: block;
-    width: min(460px, 94vw);
-    background: #050505;
-    border: 1px solid var(--accent, #39ff4a);
-    padding: 0.7rem 0.9rem;
-    color: #ddd;
-    font-family: inherit;
-  }
-
-  .combat-frame,
-  .combat-art,
-  .combat-hp pre {
-    margin: 0;
-  }
-
-  .combat-art {
-    min-height: 4.5rem;
-    color: #ddd;
-  }
-
-  .combat-name {
-    margin: 0.35rem 0 0.45rem;
-    font-weight: 700;
-  }
-
-  .combat-hp {
-    display: grid;
-    grid-template-columns: 5.7rem 1fr auto;
-    gap: 0.55rem;
-    align-items: center;
-    padding: 0.25rem 0.35rem;
-    margin-top: 0.3rem;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-  }
-
-  .combat-hp span {
-    font-weight: 700;
-    letter-spacing: 0.08em;
-  }
-
-  .enemy-hp {
-    color: #ff6767;
-  }
-
-  .player-hp {
-    color: #62f7ff;
-  }
-
-  .combat-lock {
-    margin: 0.6rem 0 0.4rem;
-    color: #aaa;
-  }
-
-  .forge-item small:first-of-type {
-    color: #d8d8d8;
-  }
-
-  .bag-slot span,
-  .equipment-row span,
-  .item-detail pre,
-  .forge-item > span {
-    white-space: nowrap;
-    letter-spacing: 0.03em;
-  }
-</style>

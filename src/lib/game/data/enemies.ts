@@ -226,6 +226,139 @@ export const enemies: Record<string, Enemy> = {
     gold: 240,
     boss: true,
     art: ['   _________', '  /  Ø   Ø  \\', ' |     ^     |', ' |  \\_____/  |', '  \\_________/', '      | |'].join('\n')
+  },
+  ashHound: {
+    id: 'ash-hound',
+    name: 'Ash Hound',
+    glyph: 'h',
+    hp: 88,
+    maxHp: 88,
+    attack: 19,
+    defense: 7,
+    xp: 74,
+    gold: 90,
+    area: 'obsidian-pit',
+    art: ['  /\\_/\\\\', ' ( o o )', ' /_===_\\'].join('\n')
+  },
+  obsidianCrawler: {
+    id: 'obsidian-crawler',
+    name: 'Obsidian Crawler',
+    glyph: 'c',
+    hp: 104,
+    maxHp: 104,
+    attack: 21,
+    defense: 9,
+    xp: 86,
+    gold: 105,
+    area: 'obsidian-pit',
+    art: ['  __..__', ' /_####_\\', '  / || \\'].join('\n')
+  },
+  glassRevenant: {
+    id: 'glass-revenant',
+    name: 'Glass Revenant',
+    glyph: 'g',
+    hp: 150,
+    maxHp: 150,
+    attack: 27,
+    defense: 10,
+    xp: 145,
+    gold: 180,
+    rare: true,
+    area: 'obsidian-pit',
+    art: ['  .---.', ' /# # \\', '|  ^  |', ' \\___/', '  /|\\'].join('\n')
+  },
+  cinderAcolyte: {
+    id: 'cinder-acolyte',
+    name: 'Cinder Acolyte',
+    glyph: 'a',
+    hp: 124,
+    maxHp: 124,
+    attack: 25,
+    defense: 10,
+    xp: 104,
+    gold: 126,
+    area: 'ashen-cathedral',
+    art: ['   /\\', '  /__\\', '  (..)', '  /||\\'].join('\n')
+  },
+  bellWraith: {
+    id: 'bell-wraith',
+    name: 'Bell Wraith',
+    glyph: 'b',
+    hp: 138,
+    maxHp: 138,
+    attack: 28,
+    defense: 11,
+    xp: 116,
+    gold: 138,
+    area: 'ashen-cathedral',
+    art: ['  ____', ' /_||_\\', '   ||', '  /__\\'].join('\n')
+  },
+  emberSaint: {
+    id: 'ember-saint',
+    name: 'Ember Saint',
+    glyph: 's',
+    hp: 190,
+    maxHp: 190,
+    attack: 34,
+    defense: 14,
+    xp: 210,
+    gold: 260,
+    rare: true,
+    area: 'ashen-cathedral',
+    art: ['  .-^-.', ' / fire\\', '|  _  |', ' \\___/', '  /|\\'].join('\n')
+  },
+  voidIndexer: {
+    id: 'void-indexer',
+    name: 'Void Indexer',
+    glyph: 'i',
+    hp: 164,
+    maxHp: 164,
+    attack: 33,
+    defense: 13,
+    xp: 142,
+    gold: 170,
+    area: 'void-archives',
+    art: ['  _____', ' | ? ? |', ' |__#__|', '  /||\\'].join('\n')
+  },
+  hollowArchivist: {
+    id: 'hollow-archivist',
+    name: 'Hollow Archivist',
+    glyph: 'v',
+    hp: 182,
+    maxHp: 182,
+    attack: 36,
+    defense: 15,
+    xp: 166,
+    gold: 195,
+    area: 'void-archives',
+    art: ['  _____', ' | Ø Ø |', ' | --- |', ' /|___|\\'].join('\n')
+  },
+  nullChoir: {
+    id: 'null-choir',
+    name: 'Null Choir',
+    glyph: 'n',
+    hp: 240,
+    maxHp: 240,
+    attack: 43,
+    defense: 17,
+    xp: 290,
+    gold: 340,
+    rare: true,
+    area: 'void-archives',
+    art: ['  o o o', ' /|/|/|', '  voices', '  erased'].join('\n')
+  },
+  hollowKing: {
+    id: 'hollow-king',
+    name: 'The Hollow King',
+    glyph: 'H',
+    hp: 420,
+    maxHp: 420,
+    attack: 48,
+    defense: 20,
+    xp: 520,
+    gold: 760,
+    boss: true,
+    art: ['   ___________', '  /  H     H  \\', ' |     ___     |', ' |  __/   \\__  |', '  \\___________/', '      /|||\\'].join('\n')
   }
 };
 
@@ -243,7 +376,10 @@ export const enemiesByArea: Record<AreaId, string[]> = {
     'oldBarkKing'
   ],
   'rust-mine': ['mineCrawler', 'rustBandit', 'oreMimic'],
-  'sunken-library': ['bookWraith', 'nullScribe', 'redactedSaint']
+  'sunken-library': ['bookWraith', 'nullScribe', 'redactedSaint'],
+  'obsidian-pit': ['ashHound', 'obsidianCrawler', 'glassRevenant'],
+  'ashen-cathedral': ['cinderAcolyte', 'bellWraith', 'emberSaint'],
+  'void-archives': ['voidIndexer', 'hollowArchivist', 'nullChoir']
 };
 
 export function cloneEnemy(id: keyof typeof enemies): Enemy {

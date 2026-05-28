@@ -2,16 +2,18 @@ import type { AreaId, Enemy, GameState } from '../types/game';
 import { generateLootItem } from '../data/items';
 import { attackPower, defensePower, gainXp, luckPower } from './player';
 import { between, roll } from './random';
-import { areaOrder, nodes } from '../data/world';
+import { allAreaOrder, nodes, regionAreaOrder } from '../data/world';
+import { regionById, regionForArea } from '../data/regions';
+import { advanceMineAfterWin } from './mine';
 
 export function startCombat(state: GameState, enemy: Enemy, source: GameState['location']): void {
   const nextEnemy = structuredClone(enemy);
 
   if (nextEnemy.boss) {
-    nextEnemy.maxHp += 120;
+    nextEnemy.maxHp += state.currentRegion === 2 ? 180 : 120;
     nextEnemy.hp = nextEnemy.maxHp;
-    nextEnemy.attack += 8;
-    nextEnemy.defense += 5;
+    nextEnemy.attack += state.currentRegion === 2 ? 14 : 8;
+    nextEnemy.defense += state.currentRegion === 2 ? 8 : 5;
   }
 
   state.combat = {
@@ -84,24 +86,27 @@ function winCombat(state: GameState, enemy: Enemy): void {
     droppedItem = item;
   }
 
-  if (enemy.boss) {
-    state.bossDefeated = true;
-    state.location = 'village';
-    state.player.hp = state.player.maxHp;
-    state.notice = droppedItem
-      ? {
-          title: `${droppedItem.rarity.toUpperCase()} ITEM DROP`,
-          message: `${droppedItem.name} was added to your inventory.`,
-          kind: 'item'
-        }
-      : {
-          title: 'Victory',
-          message: 'The Watcher fell. The first region is complete.',
-          kind: 'victory'
-        };
+  if (source === 'deep-mine') {
+    advanceMineAfterWin(state);
 
-    state.log.unshift('The Watcher fell. The first region is complete.');
+    if (roll(0.18)) {
+      const key = state.mine.floor > 1000 ? 'hollow' : roll(0.5) ? 'ash' : 'cinder';
+      state.player.materials[key] = (state.player.materials[key] ?? 0) + 1;
+      state.log.unshift(`[material] Mine reward: 1 ${key}.`);
+    }
+
+    state.notice = {
+      title: 'Mine Floor Cleared',
+      message: `Reached floor ${state.mine.floor}. Max depth: ${state.mine.maxFloorReached}.`,
+      kind: 'victory'
+    };
+
     finishCombat(state);
+    return;
+  }
+
+  if (enemy.boss) {
+    finishBossCombat(state, enemy, droppedItem);
     return;
   }
 
@@ -162,13 +167,66 @@ function winCombat(state: GameState, enemy: Enemy): void {
   finishCombat(state);
 }
 
+function finishBossCombat(state: GameState, enemy: Enemy, droppedItem: ReturnType<typeof generateLootItem> | null): void {
+  state.defeatedBosses[enemy.id] = true;
+  state.bossDefeated = true;
+  state.player.hp = state.player.maxHp;
+
+  if (enemy.id === 'the-watcher') {
+    state.currentRegion = 2;
+    state.unlockedSystems = ['mine', 'enchantments'];
+    state.bossUnlocked = false;
+    state.bossDefeated = false;
+    state.location = 'ashen-refuge';
+    state.forge.nextRefreshAt = 0;
+
+    state.notice = droppedItem
+      ? {
+          title: `${droppedItem.rarity.toUpperCase()} ITEM DROP`,
+          message: `${droppedItem.name} was added to your inventory. Ashen Depths unlocked.`,
+          kind: 'item'
+        }
+      : {
+          title: 'Ashen Depths',
+          message: 'The Watcher fell. Region 2, Deep Mine and Enchantments are now available.',
+          kind: 'victory'
+        };
+
+    state.log.unshift('The Watcher fell. The Ashen Depths opened.');
+    state.log.unshift('Unlocked: 1500 Floor Mine and Glyph Anvil.');
+    finishCombat(state);
+    return;
+  }
+
+  if (enemy.id === 'hollow-king') {
+    state.location = 'ashen-refuge';
+    state.notice = {
+      title: 'Region Complete',
+      message: 'The Hollow King fell. Region 2 is complete for now.',
+      kind: 'victory'
+    };
+    state.log.unshift('The Hollow King fell. Region 2 is complete.');
+    finishCombat(state);
+    return;
+  }
+
+  state.location = regionById[state.currentRegion].villageNodeId as GameState['location'];
+  state.notice = {
+    title: 'Victory',
+    message: `${enemy.name} fell.`,
+    kind: 'victory'
+  };
+
+  finishCombat(state);
+}
+
 function loseCombat(state: GameState, enemy: Enemy): void {
   const lostGold = Math.floor(state.player.gold * 0.3);
 
   state.player.gold = Math.max(0, state.player.gold - lostGold);
   state.player.xp = 0;
   state.player.hp = state.player.maxHp;
-  state.location = 'village';
+  state.location = regionById[state.currentRegion].villageNodeId as GameState['location'];
 
   state.notice = {
     title: 'Defeat',
@@ -178,23 +236,22 @@ function loseCombat(state: GameState, enemy: Enemy): void {
 
   state.log.unshift(`Defeat: ${enemy.name} defeated @.`);
   state.log.unshift(`Death penalty: lost ${lostGold} gold and XP progress was reset.`);
-  state.log.unshift('Returned to Glyphbound Village.');
+  state.log.unshift(`Returned to ${nodes[state.location].shortName}.`);
 
   finishCombat(state);
 }
-
 
 function finishCombat(state: GameState): void {
   state.combat = {
     active: false,
     enemy: null,
     tick: 0,
-    source: 'village'
+    source: regionById[state.currentRegion].villageNodeId as GameState['location']
   };
 }
 
 function isAreaId(value: string): value is AreaId {
-  return areaOrder.includes(value as AreaId);
+  return allAreaOrder.includes(value as AreaId);
 }
 
 function itemDropChance(enemy: Enemy, luck: number): number {
@@ -208,23 +265,27 @@ function itemDropChance(enemy: Enemy, luck: number): number {
 
 function levelCapFor(source: GameState['location']): number {
   if (isAreaId(source)) {
-    return 20;
+    const region = regionForArea(source);
+    return regionById[region].levelMax;
+  }
+
+  if (source === 'deep-mine') {
+    return Number.POSITIVE_INFINITY;
   }
 
   return Number.POSITIVE_INFINITY;
 }
 
-
 function updateBossUnlock(state: GameState): void {
-  const cleared = areaOrder.every((id) => state.areaProgress[id].cleared);
+  const cleared = regionAreaOrder[state.currentRegion].every((id) => state.areaProgress[id].cleared);
 
   if (cleared && !state.bossUnlocked) {
     state.bossUnlocked = true;
     state.notice = {
       title: 'Boss Unlocked',
-      message: 'The Watcher Gate opened. Farm one last upgrade before entering.',
+      message: `${regionById[state.currentRegion].boss} is now available.`,
       kind: 'info'
     };
-    state.log.unshift('The Watcher Gate opened. The boss is available in the village.');
+    state.log.unshift(`${regionById[state.currentRegion].boss} is available.`);
   }
 }

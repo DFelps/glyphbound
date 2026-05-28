@@ -27,7 +27,13 @@ export function createPlayer(): Player {
       pages: 0,
       bark: 0,
       crystal: 0,
-      ink: 0
+      ink: 0,
+      obsidian: 0,
+      ember: 0,
+      script: 0,
+      ash: 0,
+      cinder: 0,
+      hollow: 0
     }
   };
 }
