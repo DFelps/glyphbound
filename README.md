@@ -10,6 +10,16 @@ Farm. Upgrade. Discover. Survive.
 
 ---
 
+## Demo Video
+
+Watch a short gameplay demo on YouTube:
+
+[![Glyphbound Demo Video](https://img.youtube.com/vi/PQ78WjWcvyk/maxresdefault.jpg)](https://www.youtube.com/watch?v=PQ78WjWcvyk)
+
+[Watch the demo video](https://www.youtube.com/watch?v=PQ78WjWcvyk)
+
+---
+
 ## Overview
 
 Glyphbound is designed around satisfying progression loops.
@@ -232,7 +242,7 @@ Electron desktop version
 Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/glyphbound.git
+git clone https://github.com/DFelps/glyphbound.git
 cd glyphbound
 ```
 
